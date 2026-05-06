@@ -1,23 +1,54 @@
-"""Whitelist of dispatch-prose patterns recognized by rewrite.py.
+"""Regex patterns for detecting CE agent name references in skill prose.
 
-Each pattern is a compiled regex that captures an `agent` group naming the
-specialist to invoke. After replacement, rewrite.py performs a stray-mention
-scan: any remaining `<known-agent-name>` token in the rewritten file is a
-build failure (either a new prose pattern needs to be added here, or the
-mention is documentation that needs explicit annotation).
+The pattern is the entry point for fail-loud detection: any token in a skill
+file that matches `AGENT_REFERENCE_RE` is checked against the manifest of
+extracted agents. A match that's NOT in the manifest is a stray mention,
+flagged by rewrite.py and (if confirmed as a dispatch site) failed by
+validate.py.
 
-Initial set seeded from upstream CE @ <pinned-tag>; extend over time as
-upstream's prose drifts.
+The shape: `ce-<words>-<persona-suffix>` where persona-suffix is one of the
+agent role suffixes upstream CE uses. Skill names (ce-code-review,
+ce-brainstorm, ce-plan, ce-work, etc.) end in verb-like roots and are excluded.
 
-Phase 2: populate.
+If upstream introduces a new agent role suffix, extend the suffix list below.
+That's the maintenance vector: every CE upstream release that adds a brand-new
+suffix breaks the build until the suffix is added here.
 """
 
 from __future__ import annotations
 
 import re
 
-# Each entry: (regex, description for debug output on failure).
-# The regex MUST capture a named group `agent` containing the specialist name.
-DISPATCH_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # Phase 2: populate against current upstream CE checkout.
-]
+# Persona suffixes observed in CE v3.6.1 (49 agents). Sorted for diff stability.
+PERSONA_SUFFIXES: list[str] = sorted([
+    "agent",
+    "analyst",
+    "analyzer",
+    "detector",
+    "expert",
+    "guardian",
+    "historian",
+    "hunter",
+    "iterator",
+    "oracle",
+    "researcher",
+    "resolver",
+    "reviewer",
+    "sentinel",
+    "specialist",
+    "strategist",
+    "sync",
+    "writer",
+])
+
+# `ce-` + at least one mid-segment + `-` + persona-suffix, on a word boundary.
+# Examples that match: ce-security-reviewer, ce-data-integrity-guardian,
+# ce-figma-design-sync, ce-deployment-verification-agent.
+# Examples that don't: ce-code-review, ce-brainstorm, ce-plan (skill names).
+AGENT_REFERENCE_RE: re.Pattern[str] = re.compile(
+    # Greedy `*` so that names containing one suffix as a middle segment
+    # (e.g. `ce-scope-guardian-reviewer` — `guardian` is a suffix) match the
+    # longest valid persona name. Non-greedy `*?` would prematurely match
+    # `ce-scope-guardian` and miss the real `-reviewer` tail.
+    r"\bce-[a-z][a-z0-9-]*-(?:" + "|".join(PERSONA_SUFFIXES) + r")\b"
+)

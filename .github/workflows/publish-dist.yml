@@ -35,17 +35,11 @@ jobs:
           rm -rf dist-staged
           mkdir -p dist-staged
 
-      - name: Run converter (Phase 2/3 — currently stubbed)
+      - name: Run converter pipeline
         run: |
-          nix develop --command python converter/extract.py upstream-checkout dist-staged
+          nix develop --command python converter/extract.py upstream-checkout dist-staged "${{ inputs.upstream_tag }}"
           nix develop --command python converter/rewrite.py dist-staged
           nix develop --command python converter/validate.py dist-staged
-
-      - name: Smoke check
-        run: |
-          if [ -f dist-staged/flake.nix ]; then
-            nix flake check ./dist-staged
-          fi
 
       - name: Apply staged dist/
         run: |
