@@ -1,0 +1,28 @@
+{
+  "name": "ce-lite",
+  "version": "3.6.1-lite",
+  "description": "Lightweight-delegation variant of compound-engineering. Agent registrations removed; specialist prompts loaded on demand from references/agent-prompts/. See https://github.com/ak2k/ce-lite.",
+  "author": {
+    "name": "Kieran Klaassen",
+    "email": "kieran@every.to",
+    "url": "https://github.com/kieranklaassen"
+  },
+  "homepage": "https://github.com/ak2k/ce-lite",
+  "repository": "https://github.com/ak2k/ce-lite",
+  "license": "MIT",
+  "keywords": [
+    "ai-powered",
+    "compound-engineering",
+    "workflow-automation",
+    "code-review",
+    "rails",
+    "ruby",
+    "python",
+    "typescript",
+    "knowledge-management",
+    "image-generation"
+  ],
+  "ce_lite": {
+    "upstream_tag": "compound-engineering-v3.6.1"
+  }
+}
