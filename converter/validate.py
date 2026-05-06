@@ -19,13 +19,15 @@ Run after extract.py + rewrite.py. Asserts:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
 from pathlib import Path
 
 from DISPATCH_PATTERNS import AGENT_REFERENCE_RE
-from rewrite import PREAMBLE_MARKER_BEGIN
+from extract import find_plugin_root, parse_frontmatter
+from rewrite import PREAMBLE_MARKER_BEGIN, PREAMBLE_MARKER_END
 
 FRONTMATTER_FENCE_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 MIN_PROMPT_BYTES = 200  # smallest known agent prompt is ~1KB; 200 catches truncation
@@ -176,7 +178,106 @@ def check_skills(dist: Path, manifest_names: set[str]) -> None:
             )
 
 
-def main(dist_dir: str) -> int:
+def normalize_body(text: str) -> str:
+    """Trailing-whitespace normalization for body-equivalence checks.
+
+    extract.py rstrips the body and adds a single trailing newline, so direct
+    byte-for-byte comparison won't match. We strip both inputs the same way.
+    """
+    return text.rstrip() + "\n"
+
+
+def check_round_trip(dist: Path, upstream: Path, manifest_names: set[str]) -> None:
+    """Verify byte-equivalence between upstream and dist for content-bearing files.
+
+    1. Agent body: upstream agents/<name>.agent.md body == dist references/agent-prompts/<name>.md
+    2. Skill body: upstream skills/<name>/SKILL.md body == dist skills/<name>/SKILL.md body
+       (where dist's body excludes the inserted ce-lite preamble if present).
+    """
+    plugin_root = find_plugin_root(upstream)
+
+    # 1. Agent body equivalence
+    upstream_agents = plugin_root / "agents"
+    dist_prompts = dist / "references" / "agent-prompts"
+    for name in sorted(manifest_names):
+        upstream_file = upstream_agents / f"{name}.agent.md"
+        dist_file = dist_prompts / f"{name}.md"
+        if not upstream_file.is_file():
+            fail(f"round-trip: upstream missing {upstream_file}")
+
+        upstream_text = upstream_file.read_text(encoding="utf-8")
+        try:
+            _, upstream_body = parse_frontmatter(upstream_text)
+        except ValueError as exc:
+            fail(f"round-trip: cannot parse upstream {upstream_file}: {exc}")
+
+        dist_body = dist_file.read_text(encoding="utf-8")
+
+        if normalize_body(upstream_body) != normalize_body(dist_body):
+            fail(
+                f"round-trip: agent body mismatch for {name!r}\n"
+                f"  upstream: {upstream_file}\n"
+                f"  dist:     {dist_file}\n"
+                f"  bodies differ after trailing-whitespace normalization"
+            )
+
+    # 2. Skill body equivalence (preamble-aware)
+    upstream_skills = plugin_root / "skills"
+    dist_skills = dist / "skills"
+    for upstream_skill in sorted(upstream_skills.glob("*/SKILL.md")):
+        skill_name = upstream_skill.parent.name
+        dist_skill = dist_skills / skill_name / "SKILL.md"
+        if not dist_skill.is_file():
+            fail(f"round-trip: dist missing {dist_skill}")
+
+        upstream_text = upstream_skill.read_text(encoding="utf-8")
+        dist_text = dist_skill.read_text(encoding="utf-8")
+
+        # Strip the ce-lite preamble (if present) from dist for fair comparison.
+        if PREAMBLE_MARKER_BEGIN in dist_text:
+            begin = dist_text.index(PREAMBLE_MARKER_BEGIN)
+            end = dist_text.index(PREAMBLE_MARKER_END) + len(PREAMBLE_MARKER_END)
+            # Also consume the surrounding blank-line padding rewrite.py adds:
+            # "\n" + PREAMBLE + "\n" — drop one newline before begin and one
+            # after end if they're whitespace-only padding.
+            stripped = dist_text[:begin] + dist_text[end:]
+            # Collapse the blank padding: one \n before, one \n after.
+            stripped = re.sub(r"\n\n+\n", "\n\n", stripped, count=1)
+        else:
+            stripped = dist_text
+
+        if upstream_text != stripped:
+            # More forgiving comparison — allow trailing-whitespace drift on the
+            # last line. If it still doesn't match, fail with line-level details.
+            if normalize_body(upstream_text) == normalize_body(stripped):
+                continue
+            fail(
+                f"round-trip: skill body mismatch for {skill_name!r}\n"
+                f"  upstream: {upstream_skill}\n"
+                f"  dist:     {dist_skill}\n"
+                f"  body differs after preamble strip"
+            )
+
+
+def check_metadata_files_unchanged(dist: Path, upstream: Path) -> None:
+    """Files copied verbatim by extract.py should match upstream byte-for-byte.
+
+    Excludes .claude-plugin/plugin.json (intentionally rewritten).
+    """
+    plugin_root = find_plugin_root(upstream)
+    skip = {".claude-plugin", "agents", "skills"}
+    for entry in plugin_root.iterdir():
+        if entry.name in skip:
+            continue
+        dist_entry = dist / entry.name
+        if not dist_entry.exists():
+            fail(f"round-trip: dist missing {dist_entry} (upstream had it)")
+        if entry.is_file():
+            if entry.read_bytes() != dist_entry.read_bytes():
+                fail(f"round-trip: {entry.name} differs from upstream — extract.py mangled it?")
+
+
+def main(dist_dir: str, upstream_dir: str | None = None) -> int:
     dist = Path(dist_dir).resolve()
 
     print(f"validate.py: dist={dist}", file=sys.stderr)
@@ -192,6 +293,14 @@ def main(dist_dir: str) -> int:
         check_skills(dist, manifest_names)
         print(f"  skills: all SKILL.md files structurally valid; orchestrators have preambles", file=sys.stderr)
 
+        if upstream_dir:
+            upstream = Path(upstream_dir).resolve()
+            print(f"  round-trip: comparing dist against upstream={upstream}", file=sys.stderr)
+            check_round_trip(dist, upstream, manifest_names)
+            print(f"    agent bodies + skill bodies byte-equivalent", file=sys.stderr)
+            check_metadata_files_unchanged(dist, upstream)
+            print(f"    metadata files unchanged from upstream", file=sys.stderr)
+
     except ValidationError as exc:
         print(f"\n*** VALIDATION FAILED ***\n{exc}", file=sys.stderr)
         return 1
@@ -201,7 +310,11 @@ def main(dist_dir: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: validate.py <dist-dir>", file=sys.stderr)
-        sys.exit(2)
-    sys.exit(main(sys.argv[1]))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dist_dir")
+    parser.add_argument(
+        "--upstream",
+        help="upstream CE checkout to round-trip against (enables byte-equivalence checks)",
+    )
+    args = parser.parse_args()
+    sys.exit(main(args.dist_dir, args.upstream))
