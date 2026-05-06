@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ce-lite",
+  "description": "Lightweight-delegation variant of compound-engineering. Drops the persistent agent registrations (~58.8k tokens baseline) and converts orchestrator skills to spawn Task subagents on demand from references/agent-prompts/. Auto-regenerated daily from upstream EveryInc/compound-engineering-plugin.",
+  "owner": {
+    "name": "ak2k",
+    "url": "https://github.com/ak2k"
+  },
+  "plugins": [
+    {
+      "name": "ce-lite",
+      "description": "Compound-engineering specialists with near-zero baseline context cost. Same agent prompts as upstream CE; loaded only when a slash command needs them. During trial, slash commands are namespaced under /ce-lite:* so the original compound-engineering plugin can be installed alongside for direct comparison.",
+      "author": {
+        "name": "ak2k",
+        "url": "https://github.com/ak2k"
+      },
+      "source": "./dist",
+      "category": "productivity",
+      "homepage": "https://github.com/ak2k/ce-lite"
+    }
+  ]
+}
