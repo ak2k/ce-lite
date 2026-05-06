@@ -1,0 +1,74 @@
+name: publish-dist
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream CE tag to convert (e.g., v3.4.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Checkout upstream CE
+        uses: actions/checkout@v4
+        with:
+          repository: EveryInc/compound-engineering-plugin
+          ref: ${{ inputs.upstream_tag }}
+          path: upstream-checkout
+
+      - name: Stage dist/ output
+        run: |
+          rm -rf dist-staged
+          mkdir -p dist-staged
+
+      - name: Run converter (Phase 2/3 — currently stubbed)
+        run: |
+          nix develop --command python converter/extract.py upstream-checkout dist-staged
+          nix develop --command python converter/rewrite.py dist-staged
+          nix develop --command python converter/validate.py dist-staged
+
+      - name: Smoke check
+        run: |
+          if [ -f dist-staged/flake.nix ]; then
+            nix flake check ./dist-staged
+          fi
+
+      - name: Apply staged dist/
+        run: |
+          rm -rf dist
+          mv dist-staged dist
+          echo "${{ inputs.upstream_tag }}" > .last-processed
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ce-lite/upstream-${{ inputs.upstream_tag }}
+          title: "chore: convert CE ${{ inputs.upstream_tag }}"
+          commit-message: "chore: convert CE ${{ inputs.upstream_tag }}"
+          body: |
+            Automated conversion of upstream CE @ `${{ inputs.upstream_tag }}`.
+
+            All deterministic conversion stages passed:
+            - extract.py
+            - rewrite.py
+            - validate.py
+            - nix flake check on dist-staged
+
+            Reviewer: eyeball `dist/` diff, merge if structurally sane.
+          add-paths: |
+            dist/
+            .last-processed

@@ -1,0 +1,45 @@
+name: upstream-watch
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get upstream latest tag
+        id: upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag=$(gh release view --repo EveryInc/compound-engineering-plugin --json tagName -q .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Compare against last-processed
+        id: check
+        run: |
+          last=$(cat .last-processed 2>/dev/null || echo "none")
+          current="${{ steps.upstream.outputs.tag }}"
+          if [ "$last" = "$current" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream unchanged at $last; skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream advanced: $last -> $current"
+          fi
+
+      - name: Trigger publish-dist
+        if: steps.check.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run publish-dist.yml \
+            -f upstream_tag="${{ steps.upstream.outputs.tag }}"
