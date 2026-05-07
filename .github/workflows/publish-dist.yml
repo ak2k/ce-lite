@@ -16,7 +16,7 @@ jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: cachix/install-nix-action@v31
         with:
@@ -24,7 +24,7 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Checkout upstream CE
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: EveryInc/compound-engineering-plugin
           ref: ${{ inputs.upstream_tag }}
@@ -51,7 +51,7 @@ jobs:
           echo "${{ inputs.upstream_tag }}" > .last-processed
 
       - name: Open PR
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: ce-lite/upstream-${{ inputs.upstream_tag }}
           title: "chore: convert CE ${{ inputs.upstream_tag }}"
