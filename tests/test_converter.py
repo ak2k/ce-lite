@@ -610,3 +610,126 @@ def test_default_hook_rules_match_render():
     """Sanity: the constant DEFAULT_HOOK_RULES is what render_hook_rules emits."""
     rendered = _json.loads(render_hook_rules())
     assert rendered == DEFAULT_HOOK_RULES
+
+
+# -------- hook script live runtime tests (Phase B.7) --------
+#
+# render_hook_script tests above prove we generate the right SOURCE.
+# These tests pipe synthetic payloads into the actual generated script and
+# assert on output JSON — catching regressions in the runtime behaviour
+# (parsing, matching, error handling) that source-string assertions miss.
+
+import subprocess as _subprocess
+import tempfile as _tempfile
+
+
+def _run_hook_with(prompt: str, rules: dict | None = None) -> tuple[int, str, str]:
+    """Run the generated hook script against `prompt`, optionally with custom rules.
+
+    Writes script + rules to a tmpdir, pipes a UserPromptSubmit-shaped payload
+    on stdin, returns (exit_code, stdout, stderr).
+    """
+    from generate_wrappers import render_hook_rules, render_hook_script
+
+    with _tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        script_path = tmp_path / "auto_suggest.py"
+        rules_path = tmp_path / "skill-rules.json"
+        script_path.write_text(render_hook_script(), encoding="utf-8")
+        if rules is None:
+            rules_path.write_text(render_hook_rules(), encoding="utf-8")
+        else:
+            rules_path.write_text(_json.dumps(rules), encoding="utf-8")
+
+        proc = _subprocess.run(
+            ["python3", str(script_path)],
+            input=_json.dumps({"prompt": prompt}).encode("utf-8"),
+            capture_output=True,
+            timeout=10,
+        )
+        return proc.returncode, proc.stdout.decode(), proc.stderr.decode()
+
+
+def test_hook_runtime_security_keyword_fires():
+    rc, out, err = _run_hook_with("audit users.py for OWASP Top 10 issues")
+    assert rc == 0, f"non-zero exit: stderr={err!r}"
+    response = _json.loads(out)
+    assert "additionalContext" in response
+    assert "ce-ask-security-sentinel" in response["additionalContext"]
+
+
+def test_hook_runtime_architecture_keyword_fires():
+    rc, out, err = _run_hook_with("factor out the duplicated controller logic")
+    assert rc == 0
+    response = _json.loads(out)
+    assert "ce-ask-architecture-strategist" in response["additionalContext"]
+
+
+def test_hook_runtime_no_match_silent():
+    rc, out, err = _run_hook_with("the test suite is taking 12 minutes")
+    assert rc == 0
+    assert out == "", f"expected silent exit; got stdout={out!r}"
+
+
+def test_hook_runtime_empty_prompt_silent():
+    rc, out, err = _run_hook_with("")
+    assert rc == 0
+    assert out == ""
+
+
+def test_hook_runtime_handles_malformed_json_gracefully():
+    """Pipe garbage on stdin — must not crash or block the user prompt."""
+    from generate_wrappers import render_hook_script
+
+    with _tempfile.TemporaryDirectory() as tmp:
+        script_path = Path(tmp) / "auto_suggest.py"
+        script_path.write_text(render_hook_script(), encoding="utf-8")
+        proc = _subprocess.run(
+            ["python3", str(script_path)],
+            input=b"not valid json at all { malformed",
+            capture_output=True,
+            timeout=10,
+        )
+    assert proc.returncode == 0  # silent exit, not crash
+    assert proc.stdout == b""
+
+
+def test_hook_runtime_caps_at_three_suggestions():
+    """If a prompt matches many rules, output bounds to MAX_SUGGESTIONS=3."""
+    rules = {
+        "rules": [
+            {"keywords": ["x"], "persona": f"ce-test-{i}", "phrasing": f"test {i}"}
+            for i in range(10)
+        ]
+    }
+    rc, out, err = _run_hook_with("xxx", rules=rules)
+    assert rc == 0
+    response = _json.loads(out)
+    suggestions_block = response["additionalContext"]
+    assert suggestions_block.count("- test ") <= 3, (
+        f"expected ≤3 suggestions; got: {suggestions_block!r}"
+    )
+
+
+def test_hook_runtime_case_insensitive_match():
+    rc, out, _ = _run_hook_with("AUDIT FOR OWASP ISSUES")
+    response = _json.loads(out)
+    assert "ce-ask-security-sentinel" in response["additionalContext"]
+
+
+def test_hook_runtime_works_when_rules_missing():
+    """If skill-rules.json doesn't exist, hook must silent-exit (not crash)."""
+    from generate_wrappers import render_hook_script
+
+    with _tempfile.TemporaryDirectory() as tmp:
+        script_path = Path(tmp) / "auto_suggest.py"
+        script_path.write_text(render_hook_script(), encoding="utf-8")
+        # Note: no skill-rules.json written
+        proc = _subprocess.run(
+            ["python3", str(script_path)],
+            input=_json.dumps({"prompt": "audit for security"}).encode(),
+            capture_output=True,
+            timeout=10,
+        )
+    assert proc.returncode == 0
+    assert proc.stdout == b""  # silent — no rules to match

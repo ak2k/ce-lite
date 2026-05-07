@@ -82,6 +82,24 @@ case needs at least `id`, `mode`, `prompt`, `accepted_layers`. Optional
 
 ## Known limitations
 
+- **`claude -p` is not a faithful proxy for interactive Claude Code.**
+  This is the big one. Empirical evidence (Phases B.6 + B.7 eval runs):
+  - Autonomous-routing prompts: 0/4 wrappers fire even with the full
+    Tier 3 stack installed and visible.
+  - Explicit slash-command prompts (`/ce-ask-X`): 0/4 dispatch.
+    `claude -p` appears to treat slash commands as literal task text,
+    confirmed by [issue #837](https://github.com/anthropics/claude-code/issues/837).
+  - `UserPromptSubmit` hooks (Phase B.7+): not observed firing in
+    `claude -p`. The eval can't distinguish "hook didn't fire" from
+    "hook fired but had no effect."
+  - Negative cases (no specialist should fire): 4/4 always pass —
+    consistent with the hypothesis that `claude -p` simply doesn't
+    exercise routing surfaces beyond direct tool calls.
+
+  **Use this harness for structural / regression checks**, NOT for
+  validating that wrappers actually fire on real prompts. Real
+  interactive dogfood is the only validator for the routing paths.
+
 - **Realistic mode loads the user's full skill set.** Other plugins
   compete for routing attention; results aren't fully isolated. Lite
   mode is the cleaner measurement but doesn't see ce-lite-against-real-
@@ -97,3 +115,25 @@ case needs at least `id`, `mode`, `prompt`, `accepted_layers`. Optional
 - **Routing has stochastic noise.** Expect non-deterministic results
   on borderline cases. `--reps 3+` for stability, `--reps 1` for fast
   signal.
+
+## What this harness IS good for
+
+Despite the above, the harness still earns its keep:
+
+- **Negative-case regression detection**: confirms the corpus's
+  not-a-review prompts continue to produce no specialist tool_use.
+  If a future change accidentally makes ce-lite over-trigger, this
+  will catch it.
+- **Structural well-formedness of the dist**: spawning `claude -p`
+  with the plugin installed exercises the load path. If the plugin
+  fails to install, claude crashes, or any of our generated files are
+  malformed, the eval would surface it.
+- **Path-resolution sanity**: wrappers reference plugin-internal
+  paths via Glob discovery. If those break, claude -p's stream events
+  would show different / errored behavior even if the routing layer
+  itself isn't measured.
+
+The harness's findings on the routing-path layer should be read as
+**necessary-but-not-sufficient**: passing here doesn't prove
+interactive use will work, but failing here likely indicates a
+structural problem worth investigating.
