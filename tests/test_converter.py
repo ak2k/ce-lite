@@ -765,3 +765,113 @@ def test_hook_runtime_works_when_rules_missing():
         )
     assert proc.returncode == 0
     assert proc.stdout == b""  # silent — no rules to match
+
+
+# -------- Haiku intent classifier wiring (Phase B.8) --------
+#
+# We don't call real Haiku in tests (burns quota; non-deterministic). We test
+# the WIRING — that the script imports/structures the call correctly, that the
+# config gates the path, and that failure paths fall through silently.
+
+
+def test_default_config_has_haiku_disabled():
+    """Haiku is opt-in. Default config must not auto-enable it."""
+    from generate_wrappers import DEFAULT_HOOK_RULES
+    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    assert cfg["enabled"] is False
+
+
+def test_default_config_haiku_caps_budget_and_timeout():
+    """Sane defaults for cost/latency. Bounds the worst case."""
+    from generate_wrappers import DEFAULT_HOOK_RULES
+    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    assert 0 < cfg["max_budget_usd"] <= 0.05  # don't accidentally spend $5/prompt
+    assert 0 < cfg["timeout_seconds"] <= 30   # bound latency
+
+
+def test_hook_script_imports_subprocess_for_haiku():
+    """Haiku path uses subprocess.run; without it, classifier can't shell out."""
+    src = render_hook_script()
+    assert "import subprocess" in src
+    assert "subprocess.run" in src
+
+
+def test_hook_script_uses_lightweight_claude_p_flags():
+    """Haiku call must use the no-context-bloat flag combo from
+    ~/.claude/memory/claude_p_headless_subscription.md."""
+    src = render_hook_script()
+    # Each of these flags is non-negotiable for the lightweight pattern;
+    # missing any of them means the classifier call will load full env
+    # context, blowing budget and confusing the routing classifier.
+    assert "--setting-sources" in src
+    assert "--no-session-persistence" in src
+    assert "--disable-slash-commands" in src
+    assert "--system-prompt" in src
+    assert "--json-schema" in src
+    assert "--max-budget-usd" in src
+    assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" in src
+    assert "CLAUDE_CODE_DISABLE_CLAUDE_MDS" in src
+
+
+def test_hook_script_haiku_silent_on_failure():
+    """Haiku call failure paths (timeout, non-zero exit, malformed JSON,
+    low confidence) must all return None and let the script silent-exit
+    rather than crash or fabricate suggestions."""
+    src = render_hook_script()
+    # The function returns None on all known failure modes
+    assert "TimeoutExpired" in src
+    assert "JSONDecodeError" in src
+    # Confidence floor enforcement
+    assert "min_confidence" in src
+    # Disabled path (config.enabled = False) returns None
+    assert 'if not cfg.get("enabled")' in src
+
+
+def test_hook_script_haiku_uses_structured_output():
+    """The script reads `structured_output` from the JSON envelope, not
+    `result` (per claude_p_headless_subscription.md trap section)."""
+    src = render_hook_script()
+    assert '"structured_output"' in src
+    assert 'structured_output' in src
+
+
+def test_hook_runtime_haiku_disabled_falls_through():
+    """When config.haiku_classifier.enabled=False (default) AND no keyword
+    match, hook must silent-exit. NEVER calls claude -p in this state."""
+    rules = {
+        "config": {"haiku_classifier": {"enabled": False}},
+        "rules": [
+            {"keywords": ["xyz"], "persona": "ce-test", "phrasing": "no match"},
+        ],
+    }
+    rc, out, _ = _run_hook_with("totally unrelated prompt", rules=rules)
+    assert rc == 0
+    assert out == ""  # silent — no keyword match, Haiku disabled
+
+
+def test_hook_runtime_keyword_match_short_circuits_haiku():
+    """When keyword match fires, Haiku is NOT called (cheap path wins).
+
+    We can't directly verify "Haiku not called" without mocking, but we can
+    verify a keyword-match prompt produces a result quickly (<2s) — well
+    under the Haiku timeout — and contains the keyword-rule's phrasing
+    (not a Haiku-shaped fallback).
+    """
+    import time as _time
+    rules = {
+        "config": {"haiku_classifier": {"enabled": True, "timeout_seconds": 10}},
+        "rules": [
+            {
+                "keywords": ["security"],
+                "persona": "ce-security-sentinel",
+                "phrasing": "KEYWORD_PATH_MARKER",
+            },
+        ],
+    }
+    t0 = _time.monotonic()
+    rc, out, _ = _run_hook_with("security review please", rules=rules)
+    elapsed = _time.monotonic() - t0
+    assert rc == 0
+    response = _json.loads(out)
+    assert "KEYWORD_PATH_MARKER" in response["hookSpecificOutput"]["additionalContext"]
+    assert elapsed < 2.0, f"keyword-match took {elapsed:.1f}s — Haiku may have been called"

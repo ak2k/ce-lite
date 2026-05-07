@@ -1,4 +1,14 @@
 {
+  "config": {
+    "haiku_classifier": {
+      "enabled": false,
+      "model": "haiku",
+      "max_budget_usd": 0.005,
+      "timeout_seconds": 8,
+      "min_confidence": 0.6,
+      "_doc": "Optional Haiku-based intent classifier. When enabled, the hook falls back to a Haiku call if keyword matching produces no hit. Haiku reads the user prompt + persona catalog and returns a structured suggestion. Adds ~1\u20132s latency per non-keyword-matching prompt and ~$0.001 quota each. Set enabled=true to opt in. The keyword path always runs first (cheap and deterministic); Haiku is the no-keyword fallback only."
+    }
+  },
   "rules": [
     {
       "keywords": [
