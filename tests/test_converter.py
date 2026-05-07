@@ -654,15 +654,45 @@ def test_hook_runtime_security_keyword_fires():
     rc, out, err = _run_hook_with("audit users.py for OWASP Top 10 issues")
     assert rc == 0, f"non-zero exit: stderr={err!r}"
     response = _json.loads(out)
-    assert "additionalContext" in response
-    assert "ce-ask-security-sentinel" in response["additionalContext"]
+    # additionalContext must be inside hookSpecificOutput per the hook spec
+    # (https://code.claude.com/docs/en/hooks). Top-level additionalContext
+    # is silently ignored by Claude Code.
+    assert "hookSpecificOutput" in response
+    spec = response["hookSpecificOutput"]
+    assert spec.get("hookEventName") == "UserPromptSubmit"
+    assert "ce-ask-security-sentinel" in spec.get("additionalContext", "")
 
 
 def test_hook_runtime_architecture_keyword_fires():
     rc, out, err = _run_hook_with("factor out the duplicated controller logic")
     assert rc == 0
     response = _json.loads(out)
-    assert "ce-ask-architecture-strategist" in response["additionalContext"]
+    assert "ce-ask-architecture-strategist" in (
+        response["hookSpecificOutput"]["additionalContext"]
+    )
+
+
+def test_hook_runtime_emits_correct_envelope_shape():
+    """Regression guard: response MUST nest additionalContext under
+    hookSpecificOutput with hookEventName=UserPromptSubmit.
+
+    Phase B.7's first implementation got this wrong (additionalContext at
+    top level) — Claude silently ignored it and the integration eval
+    showed 0 behavior change. The bug went undetected until we wired up
+    the canonical docs check. This test prevents regression.
+    """
+    rc, out, _ = _run_hook_with("audit for security issues")
+    response = _json.loads(out)
+    # Top-level fields: only hookSpecificOutput should be present
+    assert "additionalContext" not in response, (
+        "additionalContext at top level is silently ignored by Claude Code; "
+        "it must be nested inside hookSpecificOutput"
+    )
+    assert "hookSpecificOutput" in response
+    spec = response["hookSpecificOutput"]
+    assert spec["hookEventName"] == "UserPromptSubmit"
+    assert isinstance(spec["additionalContext"], str)
+    assert spec["additionalContext"].strip()
 
 
 def test_hook_runtime_no_match_silent():
@@ -705,7 +735,7 @@ def test_hook_runtime_caps_at_three_suggestions():
     rc, out, err = _run_hook_with("xxx", rules=rules)
     assert rc == 0
     response = _json.loads(out)
-    suggestions_block = response["additionalContext"]
+    suggestions_block = response["hookSpecificOutput"]["additionalContext"]
     assert suggestions_block.count("- test ") <= 3, (
         f"expected ≤3 suggestions; got: {suggestions_block!r}"
     )
@@ -714,7 +744,9 @@ def test_hook_runtime_caps_at_three_suggestions():
 def test_hook_runtime_case_insensitive_match():
     rc, out, _ = _run_hook_with("AUDIT FOR OWASP ISSUES")
     response = _json.loads(out)
-    assert "ce-ask-security-sentinel" in response["additionalContext"]
+    assert "ce-ask-security-sentinel" in (
+        response["hookSpecificOutput"]["additionalContext"]
+    )
 
 
 def test_hook_runtime_works_when_rules_missing():
