@@ -243,6 +243,99 @@ def write_wrapper(dist: Path, persona: Persona, description: str) -> Path:
     return skill_path
 
 
+PANEL_DESCRIPTION = (
+    "Use to consult several persona specialists in parallel and merge their "
+    "findings into one response. Provide a comma-separated list of persona "
+    "names plus the task context. Bridges single-persona reach (one ce-ask-* "
+    "skill) and full orchestrator pipelines (ce-code-review etc.) when you "
+    "want N specific perspectives but not the full review pipeline."
+)
+
+
+def render_panel(personas: list[Persona]) -> str:
+    """Render the ce-ask-panel meta-skill body.
+
+    Static template — same regardless of which personas exist; the runtime
+    validates against the live manifest. Listing personas at generation time
+    would force regeneration on every upstream tag bump just to update a list
+    Claude can read from manifest.json directly.
+    """
+    return f"""\
+---
+name: ce-ask-panel
+description: {json.dumps(PANEL_DESCRIPTION)}
+argument-hint: "<persona1>,<persona2>,... <task context>"
+---
+
+{WRAPPER_GENERATED_MARKER}
+
+Dispatch a panel of multiple persona specialists in parallel and merge their
+findings into one response. Bridges single-persona ad-hoc reach
+(`/ce-ask-<one-persona>`) and the full orchestrator pipelines
+(`/ce-code-review`, `/ce-doc-review`, `/ce-resolve-pr-feedback`) — use this
+when you want N specific perspectives without the rest of the pipeline.
+
+## Usage
+
+`/ce-ask-panel <persona1>,<persona2>,... <task context>`
+
+Persona names are the **canonical** names from
+`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
+`ce-architecture-strategist`), NOT the `ce-ask-*` wrapper names.
+
+## Steps
+
+1. Parse the first whitespace-delimited token as a comma-separated persona
+   list. Trim each name. Treat the rest of the input as the user's task
+   context.
+2. Read `references/agent-prompts/manifest.json`. Validate each named
+   persona is in `agents[].name`. If any are unknown:
+
+   > Unknown persona(s): `<list>`. Known personas: `<list-from-manifest>`.
+   > Use the canonical names (e.g. `ce-security-sentinel`), not wrapper
+   > names (`ce-ask-security-sentinel`).
+
+   Stop without dispatching anything — partial dispatches confuse the
+   merged output.
+3. For each validated persona, dispatch in parallel:
+   - Read its prompt body from `references/agent-prompts/<persona>.md`.
+   - Spawn an agent with `subagent_type: "general-purpose"`.
+   - Prepend a preamble of the form:
+
+     ```
+     [ce-persona=<persona> via=ce-ask-panel]
+
+     You are operating as the <persona> specialist. Your role is defined in
+     the prompt body above. Honour the manifest's tools/model constraints
+     for this role; if a task pulls you toward tools outside that set, stop
+     and explain why your role requires it.
+     ```
+
+   - Then the user-supplied task context.
+4. Wait for all to complete. Merge into a single response, grouping by
+   persona with section headers (`## <persona> findings`). Preserve each
+   persona's structured output rather than collapsing into prose.
+
+## Notes
+
+- Trace tag `via=ce-ask-panel` distinguishes panel dispatch from direct
+  invocation (`via=ce-ask-direct`) when grepping transcripts.
+- For one persona, prefer `/ce-ask-<persona-bare-name>` — slightly cheaper
+  than going through the panel parser.
+- For all-personas-pertinent reviews of code or documents, prefer the
+  orchestrator skills (`/ce-code-review`, `/ce-doc-review`) which include
+  conditional persona selection logic.
+"""
+
+
+def write_panel(dist: Path, personas: list[Persona]) -> Path:
+    skill_dir = dist / "skills" / "ce-ask-panel"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(render_panel(personas), encoding="utf-8")
+    return skill_path
+
+
 def main(dist_arg: str, converter_arg: str | None = None) -> int:
     dist = Path(dist_arg).resolve()
     if not dist.is_dir():
@@ -264,9 +357,12 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
             used_overrides += 1
         written.append(write_wrapper(dist, persona, description))
 
+    panel_path = write_panel(dist, personas)
+
     print(
         f"generate_wrappers.py: wrote {len(written)} wrappers "
-        f"({used_overrides} from overrides, {len(written) - used_overrides} via Pass A)",
+        f"({used_overrides} from overrides, {len(written) - used_overrides} via Pass A) "
+        f"+ ce-ask-panel meta-skill",
         file=sys.stderr,
     )
     return 0
