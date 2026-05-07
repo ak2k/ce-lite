@@ -1,0 +1,135 @@
+# Integration eval corpus for ce-lite Tier 3 routing.
+#
+# Each case names a routing expectation. The runner spawns `claude -p` with
+# the prompt, parses stream-json events, and asserts which ce-lite layer
+# fires (or that none does, for negative cases).
+#
+# Layer values:
+#   - "ce-specialist"     → meta-agent (Task subagent_type=ce-specialist)
+#   - "ce-ask"            → meta-skill (Skill ce-ask)
+#   - "ce-ask-panel"      → panel skill
+#   - "ce-ask-wrapper"    → one of the 49 per-persona wrappers
+#                           (use `expected_persona` to pin which)
+#   - "none"              → no specialist fired; Claude handled directly.
+#                           Negative cases want this.
+#
+# Mode controls test surface:
+#   - autonomous: Claude must volunteer a layer without explicit naming.
+#   - explicit:   user typed a slash command; the named layer must fire.
+#   - either:     accept any of `accepted_layers` (use when the design lets
+#                 multiple paths legitimately handle the prompt).
+
+cases:
+  # ---------------- autonomous routing (positive) ----------------
+  # These exercise the ce-specialist meta-agent layer — the one that
+  # breaks the recall ceiling per Phase B.5 design.
+  - id: sec-001-mass-assignment
+    mode: autonomous
+    prompt: |
+      audit api/v2/users.py for OWASP Top 10 stuff please. especially mass
+      assignment — we just switched to flask-marshmallow and i don't trust
+      that the schemas are properly load_only-ing the password and is_admin
+      fields
+    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_personas: [ce-security-sentinel, ce-security-reviewer]
+
+  - id: sec-002-svg-upload
+    mode: autonomous
+    prompt: |
+      we let users upload SVG avatars and we render them inline in the
+      profile page. is this safe? our sanitiser config is in
+      app/sanitizers/svg_uploader.rb
+    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_personas: [ce-security-sentinel, ce-security-reviewer]
+
+  - id: arch-001-controller-dup
+    mode: autonomous
+    prompt: |
+      what's a cleaner way to factor out the user-creation logic from
+      CustomersController and OrgsController? feels copy-pasted and i
+      hate it. both controllers do create_user_with_default_role and
+      email_welcome but slightly differently
+    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_personas: [ce-architecture-strategist]
+
+  - id: simp-001-redundant-flag
+    mode: autonomous
+    prompt: |
+      review the new feature-flag plumbing in lib/featureflags.rb for any
+      YAGNI violations or redundant abstractions. i'm worried we
+      over-engineered the rollout-percentage configurability since we
+      only ever use 0% or 100%
+    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_personas: [ce-code-simplicity-reviewer]
+
+  # ---------------- explicit invocation (positive) ----------------
+  - id: explicit-001-security
+    mode: explicit
+    prompt: "/ce-ask-security-sentinel review the SVG upload handler at lib/uploads/svg_sanitizer.rb"
+    accepted_layers: [ce-ask-wrapper]
+    accepted_personas: [ce-security-sentinel]
+
+  - id: explicit-002-architecture
+    mode: explicit
+    prompt: "/ce-ask-architecture-strategist look at the new pricing module"
+    accepted_layers: [ce-ask-wrapper]
+    accepted_personas: [ce-architecture-strategist]
+
+  - id: explicit-003-meta-skill
+    mode: explicit
+    prompt: "/ce-ask security-sentinel review the JWT auth handler in app/controllers/sessions_controller.rb"
+    accepted_layers: [ce-ask, ce-ask-wrapper]
+    accepted_personas: [ce-security-sentinel]
+
+  - id: explicit-004-panel
+    mode: explicit
+    prompt: "/ce-ask-panel ce-security-sentinel,ce-architecture-strategist audit the new SSO sign-in flow in app/services/sso_login.rb"
+    accepted_layers: [ce-ask-panel]
+
+  # ---------------- negative (should NOT fire any specialist) ----------------
+  # These should NOT trigger a specialist — Claude can handle them directly,
+  # or the task isn't review-flavored.
+  - id: neg-001-test-perf
+    mode: autonomous
+    prompt: |
+      the test suite is taking 12 minutes and CI is timing out. which
+      tests should we parallelise first? i think the integration tests
+      in spec/features are the biggest culprit but i'm not 100% sure
+    accepted_layers: [none]
+
+  - id: neg-002-readme
+    mode: autonomous
+    prompt: |
+      rewrite the README so a non-engineer (specifically our new product
+      manager) can understand the architecture diagram and what each
+      service in the docker-compose does. keep it under a page
+    accepted_layers: [none]
+
+  - id: neg-003-explanation
+    mode: autonomous
+    prompt: |
+      i'm trying to remember how the OAuth handshake works between
+      rails-omniauth and our Okta IdP — got 30s for a refresher?
+      specifically the bit where we hand off the auth code and exchange
+      for a token
+    accepted_layers: [none]
+
+  - id: neg-004-config-debug
+    mode: autonomous
+    prompt: |
+      review my Sonarr arr-stack docker-compose for any obvious config
+      issues — i can't get the volume mounts right and Sonarr keeps
+      saying the import path doesn't exist
+    accepted_layers: [none]
+
+  # ---------------- discovery / catalog (positive) ----------------
+  - id: discover-001-no-args
+    mode: explicit
+    prompt: "/ce-ask"
+    accepted_layers: [ce-ask]
+
+  - id: discover-002-persona-only
+    mode: explicit
+    prompt: "/ce-ask security-sentinel"
+    accepted_layers: [ce-ask, ce-ask-wrapper]
+    accepted_personas: [ce-security-sentinel]
