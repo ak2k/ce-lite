@@ -41,12 +41,33 @@ def fail(msg: str) -> None:
     raise ValidationError(msg)
 
 
-def check_no_agents_dir(dist: Path) -> None:
+def check_agents_dir(dist: Path) -> None:
+    """Allow only the ce-specialist meta-agent in dist/agents/.
+
+    ce-lite v1 stripped all 49 individual persistent agent registrations to
+    save ~58.8k idle tokens. Phase B.5 introduces a single allowed registration:
+    `ce-specialist`, a ~2k-token router agent that internally dispatches to any
+    persona based on the prompt. This restores autonomous-routing capability
+    (the 0%-recall ceiling we measured on per-skill routing) at 30× the cost
+    efficiency of upstream's design — well within the spirit of the original
+    "minimal registrations" thesis.
+
+    Anything other than ce-specialist.agent.md in dist/agents/ is a regression.
+    """
     agents_dir = dist / "agents"
-    if agents_dir.exists():
+    if not agents_dir.exists():
+        # Pre-Phase-B.5 dist or v1: no agents at all. Acceptable.
+        return
+
+    allowed = {"ce-specialist.agent.md"}
+    actual = {p.name for p in agents_dir.iterdir() if p.is_file()}
+    extras = actual - allowed
+    if extras:
         fail(
-            f"dist/agents/ exists ({agents_dir}); ce-lite must not ship persistent "
-            f"agent registrations. extract.py should remove this dir."
+            f"dist/agents/ contains agents beyond the allowed meta-agent: "
+            f"{sorted(extras)}. ce-lite registers only ce-specialist as a "
+            f"single router agent (Phase B.5 of Tier 3). extract.py should "
+            f"strip everything else; generate_wrappers.py emits ce-specialist."
         )
 
 
@@ -326,7 +347,7 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
     print(f"validate.py: dist={dist}", file=sys.stderr)
 
     try:
-        check_no_agents_dir(dist)
+        check_agents_dir(dist)
         plugin_data = check_plugin_json(dist)
         print(f"  plugin: name={plugin_data['name']} version={plugin_data['version']}", file=sys.stderr)
 

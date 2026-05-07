@@ -1,0 +1,42 @@
+[
+  {
+    "query": "i just merged a JWT auth implementation in our rails app and i want a paranoid review pass before we ship to prod tomorrow morning. the changes are in app/controllers/sessions_controller.rb and config/initializers/devise.rb mostly. should i be worried about anything obvious?",
+    "should_trigger": true
+  },
+  {
+    "query": "review the changes to routes.rb and the new SSO sign-in flow in app/services/sso_login.rb for anything that smells off — we had a leaked-token incident last quarter and i'm extra paranoid this time. specifically worried about token replay and session-fixation",
+    "should_trigger": true
+  },
+  {
+    "query": "before i push this branch can you check the search box query handler for injection or xss risks? we're concatenating user input into a Sequel query somewhere and i think it may not be parameterised. file is lib/search/full_text.rb around line 80",
+    "should_trigger": true
+  },
+  {
+    "query": "PR #423 adds an admin-bypass debug header (X-Internal-Admin) for QA staging. tell me if shipping it as-is creates any risk — i'm specifically worried about it being present in the prod docker image since the dockerfile is shared",
+    "should_trigger": true
+  },
+  {
+    "query": "audit api/v2/users.py for OWASP Top 10 stuff please. especially mass assignment — we just switched to flask-marshmallow and i don't trust that the schemas are properly load_only-ing the password and is_admin fields",
+    "should_trigger": true
+  },
+  {
+    "query": "we let users upload SVG avatars and we render them inline in the profile page. is this safe? i remember reading something about SVGs being able to embed scripts but i don't fully understand the threat model. our sanitiser config is in app/sanitizers/svg_uploader.rb",
+    "should_trigger": true
+  },
+  {
+    "query": "the test suite is taking 12 minutes and CI is timing out. which tests should we parallelise first? i think the integration tests in spec/features are the biggest culprit but i'm not 100% sure",
+    "should_trigger": false
+  },
+  {
+    "query": "rewrite the README so a non-engineer (specifically our new product manager) can understand the architecture diagram and what each service in the docker-compose does. keep it under a page",
+    "should_trigger": false
+  },
+  {
+    "query": "what's a cleaner way to factor out the user-creation logic from CustomersController and OrgsController? feels copy-pasted and i hate it. both controllers do create_user_with_default_role and email_welcome but slightly differently",
+    "should_trigger": false
+  },
+  {
+    "query": "i'm trying to remember how the OAuth handshake works between rails-omniauth and our Okta IdP — got 30s for a refresher? specifically the bit where we hand off the auth code and exchange for a token",
+    "should_trigger": false
+  }
+]
