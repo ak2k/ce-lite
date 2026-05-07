@@ -336,6 +336,191 @@ def write_panel(dist: Path, personas: list[Persona]) -> Path:
     return skill_path
 
 
+META_SKILL_DESCRIPTION = (
+    "Discover and dispatch ce-lite specialist personas via a single slash command. "
+    "Run with no args to browse the persona catalog (security, architecture, "
+    "correctness, simplicity, pattern, performance, data-integrity, doc review, "
+    "and more). Run with `<persona-name>` to see one persona's role. Run with "
+    "`<persona-name> <task>` to dispatch that specialist on the task. For "
+    "tab-complete-friendly invocation use `/ce-ask-<persona>` directly; for "
+    "parallel multi-persona dispatch use `/ce-ask-panel`."
+)
+
+
+META_AGENT_DESCRIPTION = (
+    "Code-review/architecture/security/correctness/simplicity/pattern specialist. "
+    "Delegate to this agent when reviewing code or documents that benefit from a "
+    "focused specialist's eyes — even tasks the main agent could handle, the "
+    "specialist provides an independent perspective uncoloured by current "
+    "conversation context. Routes internally to one of ~49 persona prompts "
+    "(catalogued in references/agent-prompts/manifest.json). Pass "
+    "`persona=<name>` in the prompt to select; if omitted or unknown, the agent "
+    "lists available specialists and asks for selection."
+)
+
+
+def render_meta_skill() -> str:
+    """Render the /ce-ask single-slash-command catalog/dispatch surface.
+
+    Catalog is read from manifest.json at runtime — body stays stable across
+    upstream tag bumps even when persona list changes. Per-persona wrappers
+    (/ce-ask-<persona>) provide tab-complete-friendly explicit invocation; this
+    meta-skill provides the discoverable single-command surface for users who
+    don't have a specific persona name in mind yet.
+    """
+    return f"""\
+---
+name: ce-ask
+description: {json.dumps(META_SKILL_DESCRIPTION)}
+argument-hint: "[persona-name [task context]]"
+---
+
+{WRAPPER_GENERATED_MARKER}
+
+The single discoverable entry point to ce-lite specialist personas. Three modes
+based on argument shape.
+
+## Usage
+
+- `/ce-ask` — print the persona catalog (name + specialty for each).
+- `/ce-ask <persona>` — show one persona's full role definition.
+- `/ce-ask <persona> <task>` — dispatch that persona on the task.
+
+Persona names are the canonical names from
+`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
+`ce-architecture-strategist`). Argument parsing: first whitespace-delimited
+token is the persona name; everything after is the task context.
+
+## Steps
+
+1. **No args** — read `references/agent-prompts/manifest.json` and print one
+   line per `agents[*]` entry: `<name> — <description>`. Group loosely by
+   role family (review, document, design, etc.) if helpful. Stop.
+
+2. **Persona name only** — validate against `manifest.json`. If unknown:
+   > Persona `<name>` not in the catalog. Run `/ce-ask` (no args) to see all
+   > available personas.
+   If known, read `references/agent-prompts/<name>.md` and present the
+   persona's role definition along with manifest metadata (tools, model).
+   Stop.
+
+3. **Persona name + task** — dispatch via the `Agent` tool with
+   `subagent_type: "general-purpose"`. Prepend this preamble to the persona's
+   prompt body, then append the user's task context:
+
+   ```
+   [ce-persona=<persona> via=ce-ask-meta]
+
+   You are operating as the <persona> specialist. Your role is defined in the
+   prompt body above. Manifest declares this role uses
+   tools=[<tools-from-manifest>] and model=<model>. Honour those constraints:
+   if a task pulls you toward tools outside that set, stop and explain why
+   your role requires it — don't silently broaden scope.
+   ```
+
+## Notes
+
+- Tab-complete-friendly explicit invocation: `/ce-ask-<persona-name>` (one
+  per persona, generated alongside this meta-skill).
+- Parallel multi-persona dispatch: `/ce-ask-panel <a>,<b>,<c> <task>`.
+- Autonomous specialist consultation: the harness invokes the
+  `ce-specialist` registered agent directly via `Task` when reviewing
+  warrants a specialist perspective; that path doesn't go through this skill.
+"""
+
+
+def render_meta_agent() -> str:
+    """Render the ce-specialist meta-agent.
+
+    Single registered agent costs ~2k tokens at session start (vs ~58.8k for
+    v1's 49 individual registrations). The harness considers registered
+    agents during autonomous routing more aggressively than skills — this
+    layer breaks the recall ceiling measured on per-skill routing in
+    Phase C dry-run. Catalog is read from manifest.json at runtime so the
+    agent body stays stable across upstream tag bumps.
+    """
+    return f"""\
+---
+name: ce-specialist
+description: {json.dumps(META_AGENT_DESCRIPTION)}
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
+model: inherit
+---
+
+{WRAPPER_GENERATED_MARKER}
+
+You are a router agent for ce-lite specialist personas. Your role is to adopt
+the persona named in the user's prompt and respond from that specialist's
+perspective. The full persona prompts live as data files alongside this
+plugin; you select one by name and embody it.
+
+## Steps
+
+1. **Parse `persona=<name>`** from the user's prompt. If absent, scan the
+   prompt for an obvious persona-name reference (one of the canonical names
+   from `references/agent-prompts/manifest.json`).
+2. **Validate**: read `references/agent-prompts/manifest.json` and confirm
+   the persona exists in `agents[*].name`. If absent or unknown, list all
+   available personas grouped by role family (review, document review,
+   design, research, etc.) and ask the user to specify. Do NOT default to a
+   guess — partial dispatch confuses output.
+3. **Adopt the persona**: read its full prompt body from
+   `references/agent-prompts/<name>.md`. That prompt body completely
+   defines your role for this task — follow its instructions, reporting
+   protocols, and operational guidelines exactly.
+4. **Honour the persona's manifest constraints**: the manifest entry
+   declares `tools` and `model` for this role. Treat those as
+   self-imposed constraints — if a task pulls you toward tools outside
+   that set, stop and explain why your role requires it.
+5. **Respond to the user's task** from the adopted persona's perspective.
+   Begin your response with the trace marker
+   `[ce-persona=<name> via=ce-specialist-agent]` so analytics can grep
+   transcripts for routing patterns when something looks off.
+
+## Why this agent exists
+
+ce-lite v1 stripped the ~49 individual specialist agent registrations from
+upstream compound-engineering to recover ~58.8k tokens of idle context. That
+saved a lot but lost the harness's autonomous-routing capability — Claude
+no longer reaches for a security-sentinel on its own when reviewing
+auth code, because there's nothing for it to reach for.
+
+This meta-agent restores that capability at ~2k tokens (one registration
+instead of 49). The harness sees a single specialist-router and routes
+review/analysis tasks through it; the agent then internally adopts the
+right persona based on the task and the persona catalog.
+
+For explicit user invocation, prefer:
+- `/ce-ask-<persona>` — tab-complete-friendly per-persona slash commands.
+- `/ce-ask <persona> <task>` — single discoverable slash command.
+- `/ce-ask-panel <a>,<b>,<c> <task>` — parallel multi-persona dispatch.
+
+This agent is the **autonomous-reach** layer; the slash commands are the
+**explicit-reach** layer. Both compose; both are useful for different
+moments.
+"""
+
+
+def write_meta_skill(dist: Path) -> Path:
+    skill_dir = dist / "skills" / "ce-ask"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    skill_path = skill_dir / "SKILL.md"
+    skill_path.write_text(render_meta_skill(), encoding="utf-8")
+    return skill_path
+
+
+def write_meta_agent(dist: Path) -> Path:
+    agents_dir = dist / "agents"
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    agent_path = agents_dir / "ce-specialist.agent.md"
+    agent_path.write_text(render_meta_agent(), encoding="utf-8")
+    return agent_path
+
+
 def main(dist_arg: str, converter_arg: str | None = None) -> int:
     dist = Path(dist_arg).resolve()
     if not dist.is_dir():
@@ -358,11 +543,13 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
         written.append(write_wrapper(dist, persona, description))
 
     panel_path = write_panel(dist, personas)
+    meta_skill_path = write_meta_skill(dist)
+    meta_agent_path = write_meta_agent(dist)
 
     print(
         f"generate_wrappers.py: wrote {len(written)} wrappers "
         f"({used_overrides} from overrides, {len(written) - used_overrides} via Pass A) "
-        f"+ ce-ask-panel meta-skill",
+        f"+ ce-ask-panel meta-skill + ce-ask discovery skill + ce-specialist meta-agent",
         file=sys.stderr,
     )
     return 0
