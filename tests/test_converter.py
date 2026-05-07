@@ -450,12 +450,16 @@ def test_render_panel_description_is_substantive():
     assert "comma-separated" in PANEL_DESCRIPTION.lower()
 
 
-# -------- meta-skill ce-ask + meta-agent ce-specialist (Phase B.5) --------
+# -------- meta-skill ce-ask (Phase B.5) — meta-agent removed in B.7 --------
+
+import json as _json  # local alias to avoid clashing with module-level imports
 
 from generate_wrappers import (  # noqa: E402
-    META_AGENT_DESCRIPTION,
+    DEFAULT_HOOK_RULES,
     META_SKILL_DESCRIPTION,
-    render_meta_agent,
+    render_hook_config,
+    render_hook_rules,
+    render_hook_script,
     render_meta_skill,
 )
 
@@ -506,39 +510,6 @@ def test_render_meta_skill_via_tag_distinguishes():
     assert "via=ce-ask-meta" in out
 
 
-def test_render_meta_agent_frontmatter_lists_tools_model():
-    """Manifest constraints surface in agent frontmatter for harness enforcement."""
-    out = render_meta_agent()
-    fm_block = out.split("---\n", 2)[1]
-    assert "tools:" in fm_block
-    assert "Read" in fm_block
-    assert "Grep" in fm_block
-    assert "model: inherit" in fm_block
-
-
-def test_render_meta_agent_routing_logic_in_body():
-    """Agent body must instruct the model to parse persona, validate, adopt."""
-    out = render_meta_agent()
-    assert "persona=" in out
-    assert "manifest.json" in out
-    assert "adopt" in out.lower() or "embody" in out.lower()
-
-
-def test_render_meta_agent_distinct_via_tag():
-    """Trace tag distinguishes agent-route from skill-route in transcripts."""
-    out = render_meta_agent()
-    assert "via=ce-specialist-agent" in out
-
-
-def test_render_meta_agent_documents_design_rationale():
-    """Body explains why ONE agent registration is allowed in 'no agents' ce-lite."""
-    out = render_meta_agent()
-    # Mentions the savings calculus
-    assert "58.8k" in out or "58,800" in out or "v1" in out
-    # Mentions the autonomous-routing motivation
-    assert "autonom" in out.lower()
-
-
 def test_meta_skill_description_substantive():
     """Routing surface — must convey the three modes clearly."""
     assert len(META_SKILL_DESCRIPTION) > 200
@@ -546,15 +517,8 @@ def test_meta_skill_description_substantive():
     assert "dispatch" in META_SKILL_DESCRIPTION.lower()
 
 
-def test_meta_agent_description_substantive():
-    """Routing surface — must invite delegation with a clear value prop."""
-    assert len(META_AGENT_DESCRIPTION) > 200
-    assert "specialist" in META_AGENT_DESCRIPTION.lower()
-    assert "persona=" in META_AGENT_DESCRIPTION
-
-
-def test_meta_agent_and_meta_skill_have_distinct_via_tags():
-    """Sanity: the four routing surfaces must each have a distinct via= tag."""
+def test_three_routing_layers_have_distinct_via_tags():
+    """Sanity: the three remaining routing surfaces have distinct trace tags."""
     p = Persona(
         name="ce-x", description="x", model="inherit", tools=None,
         prompt_path="references/agent-prompts/ce-x.md",
@@ -562,5 +526,87 @@ def test_meta_agent_and_meta_skill_have_distinct_via_tags():
     via_direct = "via=ce-ask-direct" in render_wrapper(p, "x")
     via_panel = "via=ce-ask-panel" in render_panel([])
     via_meta = "via=ce-ask-meta" in render_meta_skill()
-    via_agent = "via=ce-specialist-agent" in render_meta_agent()
-    assert via_direct and via_panel and via_meta and via_agent
+    assert via_direct and via_panel and via_meta
+
+
+# -------- UserPromptSubmit hook (Phase B.7) --------
+
+
+def test_hook_config_has_userpromptsubmit():
+    """The hook entry-point Claude Code looks for must be present."""
+    spec = _json.loads(render_hook_config())
+    assert "hooks" in spec
+    assert "UserPromptSubmit" in spec["hooks"]
+    handlers = spec["hooks"]["UserPromptSubmit"]
+    assert isinstance(handlers, list) and len(handlers) >= 1
+
+
+def test_hook_config_uses_plugin_root_variable():
+    """${CLAUDE_PLUGIN_ROOT} is the only portable way to point at the script."""
+    spec = _json.loads(render_hook_config())
+    cmd = spec["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+    assert "${CLAUDE_PLUGIN_ROOT}" in cmd
+    assert "auto_suggest.py" in cmd
+
+
+def test_hook_rules_have_keywords_persona_phrasing():
+    """Rule schema — keyword/persona/phrasing — is the contract the hook script reads."""
+    rules = _json.loads(render_hook_rules())["rules"]
+    assert len(rules) >= 5  # we ship 6 default rules; 5 is a safety floor
+    for rule in rules:
+        assert "keywords" in rule and isinstance(rule["keywords"], list)
+        assert rule["keywords"], "rule with no keywords is dead weight"
+        assert "persona" in rule and rule["persona"].startswith("ce-")
+        assert "phrasing" in rule and rule["phrasing"].strip()
+
+
+def test_hook_rules_reference_real_personas():
+    """Rules must point at canonical persona names so dispatch resolves."""
+    rules = _json.loads(render_hook_rules())["rules"]
+    targeted = {r["persona"] for r in rules}
+    # High-leverage personas worth covering — if any are missing from default
+    # rules, the design is leaving obvious wins on the table.
+    expected_coverage = {
+        "ce-security-sentinel",
+        "ce-architecture-strategist",
+        "ce-code-simplicity-reviewer",
+    }
+    missing = expected_coverage - targeted
+    assert not missing, f"default rules missing high-leverage personas: {missing}"
+
+
+def test_hook_rules_phrasing_mentions_slash_command():
+    """The injected suggestion needs to give Claude an actionable command."""
+    rules = _json.loads(render_hook_rules())["rules"]
+    for rule in rules:
+        assert "/ce-" in rule["phrasing"], (
+            f"rule for {rule['persona']} doesn't suggest a slash command "
+            f"in its phrasing: {rule['phrasing']!r}"
+        )
+
+
+def test_hook_script_is_executable_python():
+    """Script starts with shebang + uses stdlib only (no external deps)."""
+    src = render_hook_script()
+    assert src.startswith("#!/usr/bin/env python3")
+    # No imports of pyyaml / requests / external libs — must be stdlib-only.
+    forbidden = ["import yaml", "import requests", "from anthropic", "import anthropic"]
+    for f in forbidden:
+        assert f not in src, f"hook script imports {f!r} — must be stdlib-only"
+
+
+def test_hook_script_handles_empty_payload_silently():
+    """Empty / malformed prompt → silent exit (don't break user prompt processing)."""
+    src = render_hook_script()
+    # The script must early-return on empty/invalid input — verify by string
+    # search since exec'ing the hook needs an active Claude session context.
+    assert "return 0" in src
+    # And critically — the silent-exit paths handle the common error cases.
+    assert "JSONDecodeError" in src
+    assert "if not isinstance(user_prompt, str)" in src or "not user_prompt" in src
+
+
+def test_default_hook_rules_match_render():
+    """Sanity: the constant DEFAULT_HOOK_RULES is what render_hook_rules emits."""
+    rendered = _json.loads(render_hook_rules())
+    assert rendered == DEFAULT_HOOK_RULES

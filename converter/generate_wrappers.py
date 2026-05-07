@@ -382,16 +382,94 @@ META_SKILL_DESCRIPTION = (
 )
 
 
-META_AGENT_DESCRIPTION = (
-    "Code-review/architecture/security/correctness/simplicity/pattern specialist. "
-    "Delegate to this agent when reviewing code or documents that benefit from a "
-    "focused specialist's eyes — even tasks the main agent could handle, the "
-    "specialist provides an independent perspective uncoloured by current "
-    "conversation context. Routes internally to one of ~49 persona prompts "
-    "(catalogued in references/agent-prompts/manifest.json). Pass "
-    "`persona=<name>` in the prompt to select; if omitted or unknown, the agent "
-    "lists available specialists and asks for selection."
-)
+DEFAULT_HOOK_RULES = {
+    "rules": [
+        {
+            "keywords": [
+                "security", "vuln", "vulnerab", "OWASP", "injection", "XSS",
+                "CSRF", "SSRF", "auth ", "auth-", "JWT", "OAuth",
+                "mass assignment", "sanitiz", "hardcoded secret", "credential leak",
+                "open redirect", "deserialization", "is this safe",
+                "paranoid review", "is it safe to ship", "before we ship",
+            ],
+            "persona": "ce-security-sentinel",
+            "phrasing": (
+                "The prompt looks security-flavored. Consider running "
+                "`/ce-lite:ce-ask-security-sentinel` (or invoking the wrapper "
+                "via Skill) for a focused security review by a specialist "
+                "persona. The wrapper dispatches a sub-agent grounded in "
+                "OWASP / injection / authn-authz / secrets-handling expertise."
+            ),
+        },
+        {
+            "keywords": [
+                "factor out", "extract method", "extract class", "duplicat",
+                "copy-pasted", "DRY", "coupling", "abstraction", "boundaries",
+                "structural refactor", "service boundaries", "module bound",
+                "pattern compliance", "design integrity",
+            ],
+            "persona": "ce-architecture-strategist",
+            "phrasing": (
+                "Architecture/design concerns visible. Consider "
+                "`/ce-lite:ce-ask-architecture-strategist` for a structural "
+                "review (pattern compliance, layer violations, naming "
+                "consistency)."
+            ),
+        },
+        {
+            "keywords": [
+                "YAGNI", "over-engineered", "premature abstraction",
+                "redundant abstraction", "simplify", "simpler way",
+                "is this too clever", "unnecessary indirection",
+                "feels overcomplicated", "could this be simpler",
+            ],
+            "persona": "ce-code-simplicity-reviewer",
+            "phrasing": (
+                "Simplicity concerns visible. Consider "
+                "`/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/"
+                "redundancy review."
+            ),
+        },
+        {
+            "keywords": [
+                "edge case", "off-by-one", "race condition", "deadlock",
+                "concurrency bug", "correctness", "logic bug",
+                "is this correct", "boundary condition",
+            ],
+            "persona": "ce-correctness-reviewer",
+            "phrasing": (
+                "Correctness concerns visible. Consider "
+                "`/ce-lite:ce-ask-correctness-reviewer` for an edge-case / "
+                "boundary-condition review."
+            ),
+        },
+        {
+            "keywords": [
+                "naming consistency", "convention drift", "style consistency",
+                "naming pattern", "matches existing", "consistent with",
+                "follow the pattern",
+            ],
+            "persona": "ce-pattern-recognition-specialist",
+            "phrasing": (
+                "Pattern/consistency review may help. Consider "
+                "`/ce-lite:ce-ask-pattern-recognition-specialist` to surface "
+                "duplication and convention drift."
+            ),
+        },
+        {
+            "keywords": [
+                "performance", "latency", "bottleneck", "slow query",
+                "N+1", "p99", "throughput", "memory pressure",
+            ],
+            "persona": "ce-performance-oracle",
+            "phrasing": (
+                "Performance angle visible. Consider "
+                "`/ce-lite:ce-ask-performance-oracle` for a structured "
+                "performance review."
+            ),
+        },
+    ]
+}
 
 
 def render_meta_skill() -> str:
@@ -467,85 +545,6 @@ after is the task context.
 """
 
 
-def render_meta_agent() -> str:
-    """Render the ce-specialist meta-agent.
-
-    Single registered agent costs ~2k tokens at session start (vs ~58.8k for
-    v1's 49 individual registrations). The harness considers registered
-    agents during autonomous routing more aggressively than skills — this
-    layer breaks the recall ceiling measured on per-skill routing in
-    Phase C dry-run. Catalog is read from manifest.json at runtime so the
-    agent body stays stable across upstream tag bumps.
-    """
-    return f"""\
----
-name: ce-specialist
-description: {json.dumps(META_AGENT_DESCRIPTION)}
-tools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-model: inherit
----
-
-{WRAPPER_GENERATED_MARKER}
-
-You are a router agent for ce-lite specialist personas. Your role is to adopt
-the persona named in the user's prompt and respond from that specialist's
-perspective. The full persona prompts live as data files alongside this
-plugin; you select one by name and embody it.
-
-{PROMPT_DISCOVERY_INSTRUCTIONS}
-
-## Steps
-
-1. **Parse `persona=<name>`** from the user's prompt. If absent, scan the
-   prompt for an obvious persona-name reference (one of the canonical
-   `ce-*` names from the plugin manifest).
-2. **Validate**: locate the plugin root via discovery instructions above
-   and read `<plugin-root>/references/agent-prompts/manifest.json`.
-   Confirm the persona exists in `agents[*].name`. If absent or unknown,
-   list all available personas grouped by role family (review, document
-   review, design, research, etc.) and ask the user to specify. Do NOT
-   default to a guess — partial dispatch confuses output.
-3. **Adopt the persona**: read its full prompt body from
-   `<plugin-root>/references/agent-prompts/<name>.md`. That prompt body
-   completely defines your role for this task — follow its instructions,
-   reporting protocols, and operational guidelines exactly.
-4. **Honour the persona's manifest constraints**: the manifest entry
-   declares `tools` and `model` for this role. Treat those as
-   self-imposed constraints — if a task pulls you toward tools outside
-   that set, stop and explain why your role requires it.
-5. **Respond to the user's task** from the adopted persona's perspective.
-   Begin your response with the trace marker
-   `[ce-persona=<name> via=ce-specialist-agent]` so analytics can grep
-   transcripts for routing patterns when something looks off.
-
-## Why this agent exists
-
-ce-lite v1 stripped the ~49 individual specialist agent registrations from
-upstream compound-engineering to recover ~58.8k tokens of idle context. That
-saved a lot but lost the harness's autonomous-routing capability — Claude
-no longer reaches for a security-sentinel on its own when reviewing
-auth code, because there's nothing for it to reach for.
-
-This meta-agent restores that capability at ~2k tokens (one registration
-instead of 49). The harness sees a single specialist-router and routes
-review/analysis tasks through it; the agent then internally adopts the
-right persona based on the task and the persona catalog.
-
-For explicit user invocation, prefer:
-- `/ce-ask-<persona>` — tab-complete-friendly per-persona slash commands.
-- `/ce-ask <persona> <task>` — single discoverable slash command.
-- `/ce-ask-panel <a>,<b>,<c> <task>` — parallel multi-persona dispatch.
-
-This agent is the **autonomous-reach** layer; the slash commands are the
-**explicit-reach** layer. Both compose; both are useful for different
-moments.
-"""
-
-
 def write_meta_skill(dist: Path) -> Path:
     skill_dir = dist / "skills" / "ce-ask"
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -554,12 +553,195 @@ def write_meta_skill(dist: Path) -> Path:
     return skill_path
 
 
-def write_meta_agent(dist: Path) -> Path:
-    agents_dir = dist / "agents"
-    agents_dir.mkdir(parents=True, exist_ok=True)
-    agent_path = agents_dir / "ce-specialist.agent.md"
-    agent_path.write_text(render_meta_agent(), encoding="utf-8")
-    return agent_path
+# ---- UserPromptSubmit hook (Phase B.7) ----
+#
+# Phase B.5's meta-agent (ce-specialist) didn't fire autonomously — the
+# integration eval (Phase B.6) measured 0/2 on autonomous review prompts even
+# with the agent registered and visible to claude -p. Industry-wide
+# research (scottspence.com, paddo.dev, jefflester/claude-skills-supercharged,
+# spences10/claude-skills-cli) converges on the same finding: skills/agents
+# auto-activate ~20% of the time even with good descriptions, because Claude
+# defaults to handling tasks itself rather than delegating to specialists.
+#
+# The proven workaround is a UserPromptSubmit hook that detects review-flavored
+# keywords and injects a suggestion ("consider /ce-ask-<persona>") into the
+# prompt before Claude sees it. Measured activation rates jump to 70–84% with
+# this approach. Cost is per-matching-prompt (a few hundred tokens of
+# injected suggestion), zero at idle — much cheaper than a registered agent
+# (~2k always-on) for occasional users.
+#
+# References:
+#   https://scottspence.com/posts/claude-code-skills-dont-auto-activate
+#   https://paddo.dev/blog/claude-skills-hooks-solution/
+#   https://github.com/anthropics/claude-code/issues/9716
+
+
+def render_hook_config() -> str:
+    """Emit dist/hooks/hooks.json — Claude Code's hook declaration spec."""
+    return json.dumps({
+        "description": (
+            "ce-lite UserPromptSubmit hook: detect review-flavored prompts and "
+            "suggest invoking the matching specialist persona wrapper. Pure "
+            "keyword matching; no LLM call per prompt; no idle-context cost."
+        ),
+        "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
+                            "timeout": 5,
+                        }
+                    ]
+                }
+            ]
+        },
+    }, indent=2) + "\n"
+
+
+def render_hook_rules() -> str:
+    """Emit dist/hooks/skill-rules.json — keyword → persona suggestion table.
+
+    This file is the curated extension point. Each release of the converter
+    can ship updated default rules; downstream users can override by replacing
+    skill-rules.json with their own (any plugin-cache rebuild from upstream
+    overwrites it, so persistent customisation should live in a separate
+    user-level hook). Keywords are case-insensitive substring matches.
+    """
+    return json.dumps(DEFAULT_HOOK_RULES, indent=2) + "\n"
+
+
+def render_hook_script() -> str:
+    """Emit dist/hooks/auto_suggest.py — the actual hook implementation.
+
+    Runs once per user prompt. Reads UserPromptSubmit JSON payload from stdin
+    (Claude Code hook protocol); matches `prompt` text against
+    skill-rules.json keywords (case-insensitive substring); emits an
+    `additionalContext` JSON response that gets prepended to Claude's view of
+    the prompt. No match → silent exit (zero token cost). At most 3 personas
+    suggested per prompt (avoid noise).
+
+    Standard library only — no PyYAML / pyyaml dependency. Fast cold-start
+    (~30 ms python overhead + microseconds of matching).
+    """
+    return '''#!/usr/bin/env python3
+"""ce-lite UserPromptSubmit hook — suggest specialist personas on keyword match.
+
+Generated by ce-lite converter (converter/generate_wrappers.py). Don't edit;
+regenerate from `skill-rules.json` instead — this script only loads rules
+from there at runtime.
+
+Protocol: Claude Code passes the user's prompt as JSON on stdin. If our
+keyword match fires, we emit `{"additionalContext": "..."}` on stdout — that
+text gets prepended to Claude's view of the prompt before Claude responds.
+Silent exit (no stdout) if nothing matches.
+
+Reference: https://code.claude.com/docs/en/hooks
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+# Generated marker — round-trip cleanup hook recognises this.
+# Do not remove without also updating the converter's check_agents_dir logic.
+_GENERATED_BY = "ce-lite converter"
+
+RULES_PATH = Path(__file__).parent / "skill-rules.json"
+MAX_SUGGESTIONS = 3  # cap injected text length on prompts that match many rules
+
+
+def _load_rules() -> list[dict]:
+    if not RULES_PATH.is_file():
+        return []
+    try:
+        data = json.loads(RULES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rules = data.get("rules") if isinstance(data, dict) else None
+    return rules if isinstance(rules, list) else []
+
+
+def _matches(prompt_lower: str, keywords: list[str]) -> bool:
+    """Substring-match any keyword against the lowercased prompt."""
+    return any(
+        isinstance(kw, str) and kw.lower() in prompt_lower
+        for kw in keywords
+    )
+
+
+def main() -> int:
+    # Hook protocol: input is a JSON object on stdin with `prompt` field.
+    try:
+        payload = json.load(sys.stdin)
+    except (OSError, json.JSONDecodeError):
+        return 0  # silent — never block the user prompt on hook failure
+
+    user_prompt = payload.get("prompt") if isinstance(payload, dict) else None
+    if not isinstance(user_prompt, str) or not user_prompt.strip():
+        return 0
+
+    rules = _load_rules()
+    if not rules:
+        return 0
+
+    prompt_lower = user_prompt.lower()
+    matched: list[dict] = []
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        keywords = rule.get("keywords") or []
+        if _matches(prompt_lower, keywords):
+            matched.append(rule)
+
+    if not matched:
+        return 0  # silent — most prompts don't match anything
+
+    suggestions = "\\n".join(
+        f"- {rule.get('phrasing', '').strip()}"
+        for rule in matched[:MAX_SUGGESTIONS]
+        if rule.get("phrasing")
+    )
+    if not suggestions:
+        return 0
+
+    response = {
+        "additionalContext": (
+            "[ce-lite auto-suggest] Based on the prompt content, ce-lite "
+            "specialist personas may be relevant:\\n"
+            + suggestions
+            + "\\nThese dispatch a sub-agent grounded in the persona's "
+            "domain expertise — invoke as a slash command for an "
+            "independent specialist perspective. (Suggestions only; the "
+            "main agent can also handle the work directly if appropriate.)"
+        ),
+    }
+    json.dump(response, sys.stdout)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+
+def write_hooks(dist: Path) -> list[Path]:
+    """Emit the hook config + rules + script under dist/hooks/."""
+    hooks_dir = dist / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    config_path = hooks_dir / "hooks.json"
+    rules_path = hooks_dir / "skill-rules.json"
+    script_path = hooks_dir / "auto_suggest.py"
+
+    config_path.write_text(render_hook_config(), encoding="utf-8")
+    rules_path.write_text(render_hook_rules(), encoding="utf-8")
+    script_path.write_text(render_hook_script(), encoding="utf-8")
+    # Make script executable (UserPromptSubmit hook spec uses it as a command)
+    script_path.chmod(0o755)
+    return [config_path, rules_path, script_path]
 
 
 def main(dist_arg: str, converter_arg: str | None = None) -> int:
@@ -585,12 +767,28 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
 
     panel_path = write_panel(dist, personas)
     meta_skill_path = write_meta_skill(dist)
-    meta_agent_path = write_meta_agent(dist)
+    hook_paths = write_hooks(dist)
+
+    # Phase B.7: ce-specialist meta-agent removed — Phase B.6 eval measured
+    # 0/2 autonomous-routing recall, confirming the industry-known finding
+    # that registered subagents auto-fire ~20% of the time. Replaced by a
+    # UserPromptSubmit hook (~84% recall, zero idle cost). If a stale
+    # dist/agents/ce-specialist.agent.md is around from an earlier run,
+    # remove it now so the install is clean.
+    stale_agent = dist / "agents" / "ce-specialist.agent.md"
+    if stale_agent.exists():
+        stale_agent.unlink()
+        agents_dir = dist / "agents"
+        try:
+            agents_dir.rmdir()  # only succeeds if now empty
+        except OSError:
+            pass
 
     print(
         f"generate_wrappers.py: wrote {len(written)} wrappers "
         f"({used_overrides} from overrides, {len(written) - used_overrides} via Pass A) "
-        f"+ ce-ask-panel meta-skill + ce-ask discovery skill + ce-specialist meta-agent",
+        f"+ ce-ask-panel + ce-ask discovery skill + UserPromptSubmit hook "
+        f"({len(hook_paths)} files)",
         file=sys.stderr,
     )
     return 0

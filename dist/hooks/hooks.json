@@ -1,0 +1,16 @@
+{
+  "description": "ce-lite UserPromptSubmit hook: detect review-flavored prompts and suggest invoking the matching specialist persona wrapper. Pure keyword matching; no LLM call per prompt; no idle-context cost.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

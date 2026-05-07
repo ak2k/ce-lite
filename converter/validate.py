@@ -41,34 +41,107 @@ def fail(msg: str) -> None:
     raise ValidationError(msg)
 
 
-def check_agents_dir(dist: Path) -> None:
-    """Allow only the ce-specialist meta-agent in dist/agents/.
+def check_no_agents_dir(dist: Path) -> None:
+    """ce-lite ships zero registered agents.
 
-    ce-lite v1 stripped all 49 individual persistent agent registrations to
-    save ~58.8k idle tokens. Phase B.5 introduces a single allowed registration:
-    `ce-specialist`, a ~2k-token router agent that internally dispatches to any
-    persona based on the prompt. This restores autonomous-routing capability
-    (the 0%-recall ceiling we measured on per-skill routing) at 30× the cost
-    efficiency of upstream's design — well within the spirit of the original
-    "minimal registrations" thesis.
+    History note: Phase B.5 briefly registered a single `ce-specialist`
+    meta-agent here. Phase B.6's integration eval measured 0/2 autonomous-
+    routing recall on review prompts even with that agent visible to claude
+    -p — confirming the industry-known ~20% activation rate for
+    "model-invoked" skills/agents. Phase B.7 replaced that mechanism with a
+    UserPromptSubmit hook (see dist/hooks/) that pushes activation toward
+    ~84% at zero idle context cost. The "no agents" thesis is back to its
+    v1 form: no persistent registrations, period.
 
-    Anything other than ce-specialist.agent.md in dist/agents/ is a regression.
+    Any agent files in dist/agents/ are a regression — extract.py should
+    have stripped them, generate_wrappers.py should not be writing any.
     """
     agents_dir = dist / "agents"
-    if not agents_dir.exists():
-        # Pre-Phase-B.5 dist or v1: no agents at all. Acceptable.
-        return
-
-    allowed = {"ce-specialist.agent.md"}
-    actual = {p.name for p in agents_dir.iterdir() if p.is_file()}
-    extras = actual - allowed
-    if extras:
+    if agents_dir.exists():
+        contents = sorted(p.name for p in agents_dir.iterdir())
         fail(
-            f"dist/agents/ contains agents beyond the allowed meta-agent: "
-            f"{sorted(extras)}. ce-lite registers only ce-specialist as a "
-            f"single router agent (Phase B.5 of Tier 3). extract.py should "
-            f"strip everything else; generate_wrappers.py emits ce-specialist."
+            f"dist/agents/ exists ({agents_dir}) and contains: {contents}. "
+            f"ce-lite must not ship persistent agent registrations. "
+            f"extract.py should strip the upstream agents/ dir; "
+            f"generate_wrappers.py should not emit any. (Phase B.5's "
+            f"ce-specialist meta-agent was removed in B.7 — see "
+            f"dist/hooks/auto_suggest.py for the replacement mechanism.)"
         )
+
+
+def check_hooks_dir(dist: Path) -> None:
+    """Validate dist/hooks/ if present.
+
+    Phase B.7 ships a UserPromptSubmit hook (auto_suggest.py + skill-rules.json
+    + hooks.json). All three must be present and well-formed if any of them
+    exist. Pre-B.7 dist (or upstream pristine) won't have a hooks/ at all,
+    which is also fine.
+    """
+    hooks_dir = dist / "hooks"
+    if not hooks_dir.exists():
+        return  # not yet on B.7+, that's fine
+
+    expected = {
+        "hooks.json": "Claude Code hook spec",
+        "skill-rules.json": "keyword → persona table",
+        "auto_suggest.py": "hook implementation script",
+    }
+    missing = [
+        f"{name} ({purpose})"
+        for name, purpose in expected.items()
+        if not (hooks_dir / name).is_file()
+    ]
+    if missing:
+        fail(
+            f"dist/hooks/ exists but is missing: {missing}. "
+            f"generate_wrappers.py should emit all three together."
+        )
+
+    # Sanity-check hooks.json shape.
+    hooks_json = hooks_dir / "hooks.json"
+    try:
+        spec = json.loads(hooks_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"dist/hooks/hooks.json: invalid JSON: {exc}")
+    if not isinstance(spec, dict) or "hooks" not in spec:
+        fail("dist/hooks/hooks.json: missing top-level `hooks` key")
+    if "UserPromptSubmit" not in spec["hooks"]:
+        fail(
+            "dist/hooks/hooks.json: missing UserPromptSubmit hook entry. "
+            "Phase B.7 design hinges on this hook firing per-prompt."
+        )
+
+    # Sanity-check skill-rules.json shape + that all rule targets exist in manifest.
+    rules_path = hooks_dir / "skill-rules.json"
+    try:
+        rules_data = json.loads(rules_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"dist/hooks/skill-rules.json: invalid JSON: {exc}")
+    rules = rules_data.get("rules") if isinstance(rules_data, dict) else None
+    if not isinstance(rules, list) or not rules:
+        fail("dist/hooks/skill-rules.json: missing or empty `rules` array")
+
+    # Cross-check every persona referenced in rules exists in the manifest.
+    manifest_path = dist / "references" / "agent-prompts" / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest_names = {a["name"] for a in manifest.get("agents", [])}
+        except (json.JSONDecodeError, KeyError):
+            manifest_names = set()
+        bad = [
+            r.get("persona") for r in rules
+            if isinstance(r, dict)
+            and r.get("persona")
+            and r["persona"] not in manifest_names
+        ]
+        if bad:
+            fail(
+                f"dist/hooks/skill-rules.json references personas not in the "
+                f"manifest: {bad}. Either upstream renamed/removed them, or "
+                f"the rules file was hand-edited without updating "
+                f"DEFAULT_HOOK_RULES in generate_wrappers.py."
+            )
 
 
 def check_plugin_json(dist: Path) -> dict:
@@ -347,7 +420,8 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
     print(f"validate.py: dist={dist}", file=sys.stderr)
 
     try:
-        check_agents_dir(dist)
+        check_no_agents_dir(dist)
+        check_hooks_dir(dist)
         plugin_data = check_plugin_json(dist)
         print(f"  plugin: name={plugin_data['name']} version={plugin_data['version']}", file=sys.stderr)
 
