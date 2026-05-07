@@ -42,6 +42,7 @@ jobs:
         run: |
           nix develop --command python converter/extract.py upstream-checkout dist-staged "${{ inputs.upstream_tag }}"
           nix develop --command python converter/rewrite.py dist-staged
+          nix develop --command python converter/generate_wrappers.py dist-staged
           nix develop --command python converter/validate.py dist-staged --upstream upstream-checkout
 
       - name: Apply staged dist/
@@ -62,6 +63,7 @@ jobs:
             All deterministic conversion stages passed:
             - extract.py
             - rewrite.py
+            - generate_wrappers.py
             - validate.py
             - nix flake check on dist-staged
 
