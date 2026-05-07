@@ -15,23 +15,42 @@ based on argument shape.
 - `/ce-ask <persona>` — show one persona's full role definition.
 - `/ce-ask <persona> <task>` — dispatch that persona on the task.
 
-Persona names are the canonical names from
-`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
-`ce-architecture-strategist`). Argument parsing: first whitespace-delimited
-token is the persona name; everything after is the task context.
+Persona names are the canonical names from this plugin's persona manifest
+(e.g. `ce-security-sentinel`, `ce-architecture-strategist`). Argument
+parsing: first whitespace-delimited token is the persona name; everything
+after is the task context.
+
+> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
+> path resolves relative to the user's project, which is usually not where
+> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
+>
+> ```
+> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
+> ```
+>
+> If that pattern returns nothing, fall back to `Bash`:
+>
+> ```
+> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
+> ```
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
+> root, so subsequent lookups in this turn don't need to re-glob.
 
 ## Steps
 
-1. **No args** — read `references/agent-prompts/manifest.json` and print one
-   line per `agents[*]` entry: `<name> — <description>`. Group loosely by
-   role family (review, document, design, etc.) if helpful. Stop.
+1. **No args** — locate the plugin root via discovery instructions above,
+   read `<plugin-root>/references/agent-prompts/manifest.json`, and print
+   one line per `agents[*]` entry: `<name> — <description>`. Group loosely
+   by role family (review, document, design, etc.) if helpful. Stop.
 
 2. **Persona name only** — validate against `manifest.json`. If unknown:
    > Persona `<name>` not in the catalog. Run `/ce-ask` (no args) to see all
    > available personas.
-   If known, read `references/agent-prompts/<name>.md` and present the
-   persona's role definition along with manifest metadata (tools, model).
-   Stop.
+   If known, read `<plugin-root>/references/agent-prompts/<name>.md` and
+   present the persona's role definition along with manifest metadata
+   (tools, model). Stop.
 
 3. **Persona name + task** — dispatch via the `Agent` tool with
    `subagent_type: "general-purpose"`. Prepend this preamble to the persona's

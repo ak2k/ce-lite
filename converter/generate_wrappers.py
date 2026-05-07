@@ -68,6 +68,30 @@ WRAPPER_GENERATED_MARKER = (
 )
 
 
+# Persona prompts live inside this plugin's install dir, but the install path
+# varies per machine and a bare relative path resolves relative to the user's
+# project (which is wrong). Every dispatch site needs the same discovery
+# protocol — keep it as one canonical block so the four templates stay in sync.
+PROMPT_DISCOVERY_INSTRUCTIONS = """\
+> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
+> path resolves relative to the user's project, which is usually not where
+> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
+>
+> ```
+> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
+> ```
+>
+> If that pattern returns nothing, fall back to `Bash`:
+>
+> ```
+> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
+> ```
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
+> root, so subsequent lookups in this turn don't need to re-glob."""
+
+
 @dataclass(frozen=True)
 class Persona:
     name: str
@@ -192,11 +216,16 @@ description: {json.dumps(description)}
 Dispatch the **{persona.name}** specialist by spawning a sub-agent with the
 persona's prompt body as preamble. The persona is one of the lightweight-
 delegation specialists in this plugin; its prompt body lives at
-`{persona.prompt_path}`.
+`{persona.prompt_path}` **inside the plugin's install directory** (NOT the
+user's project — see discovery instructions below).
+
+{PROMPT_DISCOVERY_INSTRUCTIONS}
 
 ## Steps
 
-1. Read `{persona.prompt_path}` for the persona's full role definition.
+1. Locate the prompt file via the discovery instructions above. Then read
+   the resolved path (`<plugin-root>/{persona.prompt_path}`) for the
+   persona's full role definition.
 2. Spawn a new agent with `subagent_type: "general-purpose"` (the harness's
    default fan-out type — persistent registrations were stripped to keep this
    plugin's idle context cost low). Prepend the following preamble to the
@@ -216,12 +245,14 @@ delegation specialists in this plugin; its prompt body lives at
 
 ## Missing-prompt fallback
 
-If `{persona.prompt_path}` is missing (upstream rename, partial install),
-report:
+If the discovery step returns no plugin root, OR the resolved
+`<plugin-root>/{persona.prompt_path}` does not exist (upstream rename,
+partial install), report:
 
 > Persona `{persona.name}` not found in this plugin's manifest. The plugin
-> may have been partially installed, or the persona may have been renamed
-> upstream. Re-install the plugin or regenerate the converter dist.
+> may not be installed, may have been partially installed, or the persona
+> may have been renamed upstream. Re-install the plugin or regenerate the
+> converter dist.
 
 Do **not** silently fall back to a different persona — the user explicitly
 named this specialist.
@@ -279,17 +310,20 @@ when you want N specific perspectives without the rest of the pipeline.
 
 `/ce-ask-panel <persona1>,<persona2>,... <task context>`
 
-Persona names are the **canonical** names from
-`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
-`ce-architecture-strategist`), NOT the `ce-ask-*` wrapper names.
+Persona names are the **canonical** names from the plugin's persona manifest
+(e.g. `ce-security-sentinel`, `ce-architecture-strategist`), NOT the
+`ce-ask-*` wrapper names.
+
+{PROMPT_DISCOVERY_INSTRUCTIONS}
 
 ## Steps
 
 1. Parse the first whitespace-delimited token as a comma-separated persona
    list. Trim each name. Treat the rest of the input as the user's task
    context.
-2. Read `references/agent-prompts/manifest.json`. Validate each named
-   persona is in `agents[].name`. If any are unknown:
+2. Locate the plugin root via the discovery instructions above and read
+   `<plugin-root>/references/agent-prompts/manifest.json`. Validate each
+   named persona is in `agents[].name`. If any are unknown:
 
    > Unknown persona(s): `<list>`. Known personas: `<list-from-manifest>`.
    > Use the canonical names (e.g. `ce-security-sentinel`), not wrapper
@@ -298,7 +332,8 @@ Persona names are the **canonical** names from
    Stop without dispatching anything — partial dispatches confuse the
    merged output.
 3. For each validated persona, dispatch in parallel:
-   - Read its prompt body from `references/agent-prompts/<persona>.md`.
+   - Read its prompt body from
+     `<plugin-root>/references/agent-prompts/<persona>.md`.
    - Spawn an agent with `subagent_type: "general-purpose"`.
    - Prepend a preamble of the form:
 
@@ -386,23 +421,26 @@ based on argument shape.
 - `/ce-ask <persona>` — show one persona's full role definition.
 - `/ce-ask <persona> <task>` — dispatch that persona on the task.
 
-Persona names are the canonical names from
-`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
-`ce-architecture-strategist`). Argument parsing: first whitespace-delimited
-token is the persona name; everything after is the task context.
+Persona names are the canonical names from this plugin's persona manifest
+(e.g. `ce-security-sentinel`, `ce-architecture-strategist`). Argument
+parsing: first whitespace-delimited token is the persona name; everything
+after is the task context.
+
+{PROMPT_DISCOVERY_INSTRUCTIONS}
 
 ## Steps
 
-1. **No args** — read `references/agent-prompts/manifest.json` and print one
-   line per `agents[*]` entry: `<name> — <description>`. Group loosely by
-   role family (review, document, design, etc.) if helpful. Stop.
+1. **No args** — locate the plugin root via discovery instructions above,
+   read `<plugin-root>/references/agent-prompts/manifest.json`, and print
+   one line per `agents[*]` entry: `<name> — <description>`. Group loosely
+   by role family (review, document, design, etc.) if helpful. Stop.
 
 2. **Persona name only** — validate against `manifest.json`. If unknown:
    > Persona `<name>` not in the catalog. Run `/ce-ask` (no args) to see all
    > available personas.
-   If known, read `references/agent-prompts/<name>.md` and present the
-   persona's role definition along with manifest metadata (tools, model).
-   Stop.
+   If known, read `<plugin-root>/references/agent-prompts/<name>.md` and
+   present the persona's role definition along with manifest metadata
+   (tools, model). Stop.
 
 3. **Persona name + task** — dispatch via the `Agent` tool with
    `subagent_type: "general-purpose"`. Prepend this preamble to the persona's
@@ -458,20 +496,23 @@ the persona named in the user's prompt and respond from that specialist's
 perspective. The full persona prompts live as data files alongside this
 plugin; you select one by name and embody it.
 
+{PROMPT_DISCOVERY_INSTRUCTIONS}
+
 ## Steps
 
 1. **Parse `persona=<name>`** from the user's prompt. If absent, scan the
-   prompt for an obvious persona-name reference (one of the canonical names
-   from `references/agent-prompts/manifest.json`).
-2. **Validate**: read `references/agent-prompts/manifest.json` and confirm
-   the persona exists in `agents[*].name`. If absent or unknown, list all
-   available personas grouped by role family (review, document review,
-   design, research, etc.) and ask the user to specify. Do NOT default to a
-   guess — partial dispatch confuses output.
+   prompt for an obvious persona-name reference (one of the canonical
+   `ce-*` names from the plugin manifest).
+2. **Validate**: locate the plugin root via discovery instructions above
+   and read `<plugin-root>/references/agent-prompts/manifest.json`.
+   Confirm the persona exists in `agents[*].name`. If absent or unknown,
+   list all available personas grouped by role family (review, document
+   review, design, research, etc.) and ask the user to specify. Do NOT
+   default to a guess — partial dispatch confuses output.
 3. **Adopt the persona**: read its full prompt body from
-   `references/agent-prompts/<name>.md`. That prompt body completely
-   defines your role for this task — follow its instructions, reporting
-   protocols, and operational guidelines exactly.
+   `<plugin-root>/references/agent-prompts/<name>.md`. That prompt body
+   completely defines your role for this task — follow its instructions,
+   reporting protocols, and operational guidelines exactly.
 4. **Honour the persona's manifest constraints**: the manifest entry
    declares `tools` and `model` for this role. Treat those as
    self-imposed constraints — if a task pulls you toward tools outside

@@ -16,17 +16,36 @@ when you want N specific perspectives without the rest of the pipeline.
 
 `/ce-ask-panel <persona1>,<persona2>,... <task context>`
 
-Persona names are the **canonical** names from
-`references/agent-prompts/manifest.json` (e.g. `ce-security-sentinel`,
-`ce-architecture-strategist`), NOT the `ce-ask-*` wrapper names.
+Persona names are the **canonical** names from the plugin's persona manifest
+(e.g. `ce-security-sentinel`, `ce-architecture-strategist`), NOT the
+`ce-ask-*` wrapper names.
+
+> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
+> path resolves relative to the user's project, which is usually not where
+> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
+>
+> ```
+> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
+> ```
+>
+> If that pattern returns nothing, fall back to `Bash`:
+>
+> ```
+> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
+> ```
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
+> root, so subsequent lookups in this turn don't need to re-glob.
 
 ## Steps
 
 1. Parse the first whitespace-delimited token as a comma-separated persona
    list. Trim each name. Treat the rest of the input as the user's task
    context.
-2. Read `references/agent-prompts/manifest.json`. Validate each named
-   persona is in `agents[].name`. If any are unknown:
+2. Locate the plugin root via the discovery instructions above and read
+   `<plugin-root>/references/agent-prompts/manifest.json`. Validate each
+   named persona is in `agents[].name`. If any are unknown:
 
    > Unknown persona(s): `<list>`. Known personas: `<list-from-manifest>`.
    > Use the canonical names (e.g. `ce-security-sentinel`), not wrapper
@@ -35,7 +54,8 @@ Persona names are the **canonical** names from
    Stop without dispatching anything — partial dispatches confuse the
    merged output.
 3. For each validated persona, dispatch in parallel:
-   - Read its prompt body from `references/agent-prompts/<persona>.md`.
+   - Read its prompt body from
+     `<plugin-root>/references/agent-prompts/<persona>.md`.
    - Spawn an agent with `subagent_type: "general-purpose"`.
    - Prepend a preamble of the form:
 
