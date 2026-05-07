@@ -8,11 +8,32 @@ description: "Use when the diff touches database queries, loop-heavy data transf
 Dispatch the **ce-performance-reviewer** specialist by spawning a sub-agent with the
 persona's prompt body as preamble. The persona is one of the lightweight-
 delegation specialists in this plugin; its prompt body lives at
-`references/agent-prompts/ce-performance-reviewer.md`.
+`references/agent-prompts/ce-performance-reviewer.md` **inside the plugin's install directory** (NOT the
+user's project — see discovery instructions below).
+
+> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
+> path resolves relative to the user's project, which is usually not where
+> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
+>
+> ```
+> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
+> ```
+>
+> If that pattern returns nothing, fall back to `Bash`:
+>
+> ```
+> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
+> ```
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
+> root, so subsequent lookups in this turn don't need to re-glob.
 
 ## Steps
 
-1. Read `references/agent-prompts/ce-performance-reviewer.md` for the persona's full role definition.
+1. Locate the prompt file via the discovery instructions above. Then read
+   the resolved path (`<plugin-root>/references/agent-prompts/ce-performance-reviewer.md`) for the
+   persona's full role definition.
 2. Spawn a new agent with `subagent_type: "general-purpose"` (the harness's
    default fan-out type — persistent registrations were stripped to keep this
    plugin's idle context cost low). Prepend the following preamble to the
@@ -32,12 +53,14 @@ delegation specialists in this plugin; its prompt body lives at
 
 ## Missing-prompt fallback
 
-If `references/agent-prompts/ce-performance-reviewer.md` is missing (upstream rename, partial install),
-report:
+If the discovery step returns no plugin root, OR the resolved
+`<plugin-root>/references/agent-prompts/ce-performance-reviewer.md` does not exist (upstream rename,
+partial install), report:
 
 > Persona `ce-performance-reviewer` not found in this plugin's manifest. The plugin
-> may have been partially installed, or the persona may have been renamed
-> upstream. Re-install the plugin or regenerate the converter dist.
+> may not be installed, may have been partially installed, or the persona
+> may have been renamed upstream. Re-install the plugin or regenerate the
+> converter dist.
 
 Do **not** silently fall back to a different persona — the user explicitly
 named this specialist.
