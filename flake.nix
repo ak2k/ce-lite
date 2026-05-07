@@ -25,6 +25,19 @@
             ];
           };
 
+          # `nix run .#integration-eval` — Tier 3 routing eval against
+          # `claude -p` in the user's actual env. Quota-spending; not part
+          # of `nix flake check`.
+          apps.integration-eval = {
+            type = "app";
+            meta.description = "Run the ce-lite Tier 3 routing eval (spawns claude -p)";
+            program = toString (pkgs.writeShellScript "ce-lite-integration-eval" ''
+              export PATH=${pythonEnv}/bin:$PATH
+              cd "$(${pkgs.git}/bin/git rev-parse --show-toplevel)"
+              exec ${pythonEnv}/bin/python tests/integration/run_routing_eval.py "$@"
+            '');
+          };
+
           # `nix flake check` runs these
           checks = {
             format = pkgs.runCommand "check-format" { } ''
