@@ -708,16 +708,24 @@ def main() -> int:
     if not suggestions:
         return 0
 
+    # Per https://code.claude.com/docs/en/hooks, additionalContext must be
+    # nested inside hookSpecificOutput with hookEventName set — top-level
+    # additionalContext is silently ignored. Burned us in Phase B.6 eval
+    # (initial hook implementation produced no measurable effect because
+    # the malformed envelope was being dropped by Claude Code).
     response = {
-        "additionalContext": (
-            "[ce-lite auto-suggest] Based on the prompt content, ce-lite "
-            "specialist personas may be relevant:\\n"
-            + suggestions
-            + "\\nThese dispatch a sub-agent grounded in the persona's "
-            "domain expertise — invoke as a slash command for an "
-            "independent specialist perspective. (Suggestions only; the "
-            "main agent can also handle the work directly if appropriate.)"
-        ),
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": (
+                "[ce-lite auto-suggest] Based on the prompt content, ce-lite "
+                "specialist personas may be relevant:\\n"
+                + suggestions
+                + "\\nThese dispatch a sub-agent grounded in the persona's "
+                "domain expertise — invoke as a slash command for an "
+                "independent specialist perspective. (Suggestions only; the "
+                "main agent can also handle the work directly if appropriate.)"
+            ),
+        }
     }
     json.dump(response, sys.stdout)
     return 0
