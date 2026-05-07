@@ -1,0 +1,110 @@
+{
+  "rules": [
+    {
+      "keywords": [
+        "security",
+        "vuln",
+        "vulnerab",
+        "OWASP",
+        "injection",
+        "XSS",
+        "CSRF",
+        "SSRF",
+        "auth ",
+        "auth-",
+        "JWT",
+        "OAuth",
+        "mass assignment",
+        "sanitiz",
+        "hardcoded secret",
+        "credential leak",
+        "open redirect",
+        "deserialization",
+        "is this safe",
+        "paranoid review",
+        "is it safe to ship",
+        "before we ship"
+      ],
+      "persona": "ce-security-sentinel",
+      "phrasing": "The prompt looks security-flavored. Consider running `/ce-lite:ce-ask-security-sentinel` (or invoking the wrapper via Skill) for a focused security review by a specialist persona. The wrapper dispatches a sub-agent grounded in OWASP / injection / authn-authz / secrets-handling expertise."
+    },
+    {
+      "keywords": [
+        "factor out",
+        "extract method",
+        "extract class",
+        "duplicat",
+        "copy-pasted",
+        "DRY",
+        "coupling",
+        "abstraction",
+        "boundaries",
+        "structural refactor",
+        "service boundaries",
+        "module bound",
+        "pattern compliance",
+        "design integrity"
+      ],
+      "persona": "ce-architecture-strategist",
+      "phrasing": "Architecture/design concerns visible. Consider `/ce-lite:ce-ask-architecture-strategist` for a structural review (pattern compliance, layer violations, naming consistency)."
+    },
+    {
+      "keywords": [
+        "YAGNI",
+        "over-engineered",
+        "premature abstraction",
+        "redundant abstraction",
+        "simplify",
+        "simpler way",
+        "is this too clever",
+        "unnecessary indirection",
+        "feels overcomplicated",
+        "could this be simpler"
+      ],
+      "persona": "ce-code-simplicity-reviewer",
+      "phrasing": "Simplicity concerns visible. Consider `/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/redundancy review."
+    },
+    {
+      "keywords": [
+        "edge case",
+        "off-by-one",
+        "race condition",
+        "deadlock",
+        "concurrency bug",
+        "correctness",
+        "logic bug",
+        "is this correct",
+        "boundary condition"
+      ],
+      "persona": "ce-correctness-reviewer",
+      "phrasing": "Correctness concerns visible. Consider `/ce-lite:ce-ask-correctness-reviewer` for an edge-case / boundary-condition review."
+    },
+    {
+      "keywords": [
+        "naming consistency",
+        "convention drift",
+        "style consistency",
+        "naming pattern",
+        "matches existing",
+        "consistent with",
+        "follow the pattern"
+      ],
+      "persona": "ce-pattern-recognition-specialist",
+      "phrasing": "Pattern/consistency review may help. Consider `/ce-lite:ce-ask-pattern-recognition-specialist` to surface duplication and convention drift."
+    },
+    {
+      "keywords": [
+        "performance",
+        "latency",
+        "bottleneck",
+        "slow query",
+        "N+1",
+        "p99",
+        "throughput",
+        "memory pressure"
+      ],
+      "persona": "ce-performance-oracle",
+      "phrasing": "Performance angle visible. Consider `/ce-lite:ce-ask-performance-oracle` for a structured performance review."
+    }
+  ]
+}

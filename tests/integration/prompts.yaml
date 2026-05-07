@@ -5,13 +5,18 @@
 # fires (or that none does, for negative cases).
 #
 # Layer values:
-#   - "ce-specialist"     → meta-agent (Task subagent_type=ce-specialist)
 #   - "ce-ask"            → meta-skill (Skill ce-ask)
 #   - "ce-ask-panel"      → panel skill
 #   - "ce-ask-wrapper"    → one of the 49 per-persona wrappers
 #                           (use `expected_persona` to pin which)
 #   - "none"              → no specialist fired; Claude handled directly.
 #                           Negative cases want this.
+#
+# Note: in Phase B.7 the autonomous-route is mediated by a UserPromptSubmit
+# hook (dist/hooks/auto_suggest.py) that injects a slash-command suggestion
+# when keywords match. So autonomous cases expect ce-ask-wrapper to fire as a
+# downstream effect of the hook's suggestion — not direct skill auto-routing,
+# which the eval measured at 0% recall.
 #
 # Mode controls test surface:
 #   - autonomous: Claude must volunteer a layer without explicit naming.
@@ -30,7 +35,7 @@ cases:
       assignment — we just switched to flask-marshmallow and i don't trust
       that the schemas are properly load_only-ing the password and is_admin
       fields
-    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_layers: [ce-ask-wrapper]
     accepted_personas: [ce-security-sentinel, ce-security-reviewer]
 
   - id: sec-002-svg-upload
@@ -39,7 +44,7 @@ cases:
       we let users upload SVG avatars and we render them inline in the
       profile page. is this safe? our sanitiser config is in
       app/sanitizers/svg_uploader.rb
-    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_layers: [ce-ask-wrapper]
     accepted_personas: [ce-security-sentinel, ce-security-reviewer]
 
   - id: arch-001-controller-dup
@@ -49,7 +54,7 @@ cases:
       CustomersController and OrgsController? feels copy-pasted and i
       hate it. both controllers do create_user_with_default_role and
       email_welcome but slightly differently
-    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_layers: [ce-ask-wrapper]
     accepted_personas: [ce-architecture-strategist]
 
   - id: simp-001-redundant-flag
@@ -59,7 +64,7 @@ cases:
       YAGNI violations or redundant abstractions. i'm worried we
       over-engineered the rollout-percentage configurability since we
       only ever use 0% or 100%
-    accepted_layers: [ce-specialist, ce-ask-wrapper]
+    accepted_layers: [ce-ask-wrapper]
     accepted_personas: [ce-code-simplicity-reviewer]
 
   # ---------------- explicit invocation (positive) ----------------
