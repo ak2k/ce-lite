@@ -1,6 +1,6 @@
 ---
 name: ce-brainstorm
-description: 'Explore requirements and approaches through collaborative dialogue before writing a right-sized requirements document and planning implementation. Use for feature ideas, problem framing, when the user says ''let''s brainstorm'', or when they want to think through options before deciding what to build. Also use when a user describes a vague or ambitious feature request, asks ''what should we build'', ''help me think through X'', presents a problem with multiple valid solutions, or seems unsure about scope or direction — even if they don''t explicitly ask to brainstorm.'
+description: 'Explore requirements and approaches through collaborative dialogue, then write a right-sized requirements document. Use when the user says "let''s brainstorm", "what should we build", or "help me think through X", presents a vague or ambitious feature request, or seems unsure about scope or direction -- even without explicitly asking to brainstorm.'
 argument-hint: "[feature idea or problem to explore]"
 ---
 
@@ -9,16 +9,32 @@ argument-hint: "[feature idea or problem to explore]"
 
 > **ce-lite dispatch protocol.** This skill ships in the lightweight variant of
 > compound-engineering. The persistent agent registrations have been removed;
-> specialist persona prompts now live as data files at
-> `references/agent-prompts/<name>.md` (catalogued in
-> `references/agent-prompts/manifest.json`).
+> specialist persona prompts now live as data files **inside this plugin's
+> install directory** under `references/agent-prompts/<name>.md` (catalogued
+> in `references/agent-prompts/manifest.json`).
+>
+> **Locating the persona prompts.** The plugin's install path varies, and a
+> bare `references/agent-prompts/<name>.md` resolves relative to the user's
+> project — usually wrong. To find the correct path, use Glob with one of
+> these patterns (try in order; first non-empty result wins):
+>
+> 1. `**/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 2. `**/.claude/plugins/cache/*/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 3. As a fallback, run `find ~/.claude/plugins/cache -name '<name>.md' -path
+>    '*/agent-prompts/*' 2>/dev/null | head -1` via Bash.
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) for subsequent persona lookups in this turn —
+> all personas live under the same root.
 >
 > Wherever this skill describes spawning a CE persona by name (e.g.
 > `ce-security-reviewer`, `ce-correctness-reviewer`, `ce-learnings-researcher`),
 > dispatch as follows:
 >
-> 1. Read the persona's prompt body from `references/agent-prompts/<name>.md`
->    (paths are listed in `manifest.json`).
+> 1. Read the persona's prompt body from the resolved
+>    `<plugin-root>/references/agent-prompts/<name>.md`.
 > 2. Spawn an `Agent` (or your harness's equivalent) with `subagent_type:
 >    "general-purpose"`. The persona prompt body becomes the prompt prefix; the
 >    skill's existing context bundle (intent, diff, base, file list, etc.) and
@@ -26,7 +42,10 @@ argument-hint: "[feature idea or problem to explore]"
 > 3. Apply all dispatch-time options the skill specifies for the original named
 >    agent (model override, tools allowlist, parallel-scheduler limits, etc.).
 > 4. **Do not** call `Agent({subagent_type: "ce-<name>"})` — those
->    registrations do not exist in this variant.
+>    registrations do not exist in this variant. (The single allowed
+>    registration is `ce-specialist`, a router agent that internally selects
+>    a persona — orchestrator skills generally don't need to call it
+>    directly; they read persona prompts and dispatch via general-purpose.)
 >
 > Persona names elsewhere in this skill (descriptive prose, tables, status
 > messages) are documentation; only dispatch sites change.
