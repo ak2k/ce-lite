@@ -9,16 +9,32 @@ argument-hint: "[blank to review current branch, or provide PR link]"
 
 > **ce-lite dispatch protocol.** This skill ships in the lightweight variant of
 > compound-engineering. The persistent agent registrations have been removed;
-> specialist persona prompts now live as data files at
-> `references/agent-prompts/<name>.md` (catalogued in
-> `references/agent-prompts/manifest.json`).
+> specialist persona prompts now live as data files **inside this plugin's
+> install directory** under `references/agent-prompts/<name>.md` (catalogued
+> in `references/agent-prompts/manifest.json`).
+>
+> **Locating the persona prompts.** The plugin's install path varies, and a
+> bare `references/agent-prompts/<name>.md` resolves relative to the user's
+> project — usually wrong. To find the correct path, use Glob with one of
+> these patterns (try in order; first non-empty result wins):
+>
+> 1. `**/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 2. `**/.claude/plugins/cache/*/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 3. As a fallback, run `find ~/.claude/plugins/cache -name '<name>.md' -path
+>    '*/agent-prompts/*' 2>/dev/null | head -1` via Bash.
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) for subsequent persona lookups in this turn —
+> all personas live under the same root.
 >
 > Wherever this skill describes spawning a CE persona by name (e.g.
 > `ce-security-reviewer`, `ce-correctness-reviewer`, `ce-learnings-researcher`),
 > dispatch as follows:
 >
-> 1. Read the persona's prompt body from `references/agent-prompts/<name>.md`
->    (paths are listed in `manifest.json`).
+> 1. Read the persona's prompt body from the resolved
+>    `<plugin-root>/references/agent-prompts/<name>.md`.
 > 2. Spawn an `Agent` (or your harness's equivalent) with `subagent_type:
 >    "general-purpose"`. The persona prompt body becomes the prompt prefix; the
 >    skill's existing context bundle (intent, diff, base, file list, etc.) and
@@ -26,7 +42,10 @@ argument-hint: "[blank to review current branch, or provide PR link]"
 > 3. Apply all dispatch-time options the skill specifies for the original named
 >    agent (model override, tools allowlist, parallel-scheduler limits, etc.).
 > 4. **Do not** call `Agent({subagent_type: "ce-<name>"})` — those
->    registrations do not exist in this variant.
+>    registrations do not exist in this variant. (The single allowed
+>    registration is `ce-specialist`, a router agent that internally selects
+>    a persona — orchestrator skills generally don't need to call it
+>    directly; they read persona prompts and dispatch via general-purpose.)
 >
 > Persona names elsewhere in this skill (descriptive prose, tables, status
 > messages) are documentation; only dispatch sites change.
@@ -321,15 +340,13 @@ If the output is non-empty, inform the user: "You have uncommitted changes on th
 git checkout <branch>
 ```
 
-Then detect the review base branch and compute the merge-base. Run the `scripts/resolve-base.sh` script, which handles fork-safe remote resolution with multi-fallback detection (PR metadata -> `origin/HEAD` -> `gh repo view` -> common branch names):
+Then detect the review base branch and compute the merge-base.
 
-```
-RESOLVE_OUT=$(bash scripts/resolve-base.sh) || { echo "ERROR: resolve-base.sh failed"; exit 1; }
-if [ -z "$RESOLVE_OUT" ] || echo "$RESOLVE_OUT" | grep -q '^ERROR:'; then echo "${RESOLVE_OUT:-ERROR: resolve-base.sh produced no output}"; exit 1; fi
-BASE=$(echo "$RESOLVE_OUT" | sed 's/^BASE://')
-```
+**If a PR exists for `<branch>`** (check with `gh pr view <branch> --json baseRefName,url`): reuse PR mode's `PR_BASE_REMOTE` block above. Use `baseRefName` as `<base>` and derive `<base-repo>` from the PR URL (e.g., `EveryInc/foo` from `https://github.com/EveryInc/foo/pull/123`). The block already sets `$BASE` to the merge-base SHA — `origin` may point at the user's fork, which is why naive `origin/<base>` is unsafe and the fork-safe block is required.
 
-If the script outputs an error, stop instead of falling back to `git diff HEAD`; a branch review without the base branch would only show uncommitted changes and silently miss all committed work.
+**If no PR exists**: derive the default branch. Primary source is `git symbolic-ref --quiet --short refs/remotes/origin/HEAD | sed 's#^origin/##'`; fall back to `gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'`, then to the first of `main`/`master`/`develop`/`trunk` that exists as `origin/<name>` or bare `<name>` locally. Compute `BASE=$(git merge-base HEAD <base-ref>)`, where `<base-ref>` is `origin/<base-branch>` when available, otherwise the bare local `<base-branch>` (covers single-branch clones, missing origin remote, and unfetched defaults). If `BASE` is empty and the clone is shallow (`git rev-parse --is-shallow-repository`), run `git fetch --unshallow origin` and retry.
+
+If no base can be resolved, **stop**. Do not fall back to `git diff HEAD` — a branch review without the base would only show uncommitted changes and silently miss all committed work.
 
 On success, produce the diff:
 
@@ -341,15 +358,9 @@ You may still fetch additional PR metadata with `gh pr view` for title, body, li
 
 **If no argument (standalone on current branch):**
 
-Detect the review base branch and compute the merge-base using the same `scripts/resolve-base.sh` script as branch mode:
+Apply the same base-detection logic as branch mode above, using the current branch (i.e., `gh pr view --json baseRefName,url` with no argument defaults to the current branch).
 
-```
-RESOLVE_OUT=$(bash scripts/resolve-base.sh) || { echo "ERROR: resolve-base.sh failed"; exit 1; }
-if [ -z "$RESOLVE_OUT" ] || echo "$RESOLVE_OUT" | grep -q '^ERROR:'; then echo "${RESOLVE_OUT:-ERROR: resolve-base.sh produced no output}"; exit 1; fi
-BASE=$(echo "$RESOLVE_OUT" | sed 's/^BASE://')
-```
-
-If the script outputs an error, stop instead of falling back to `git diff HEAD`; a standalone review without the base branch would only show uncommitted changes and silently miss all committed work on the branch.
+If no base can be resolved, **stop**. Do not fall back to `git diff HEAD` — a standalone review without the base would only show uncommitted changes and silently miss all committed work on the branch.
 
 On success, produce the diff:
 
