@@ -1,5 +1,5 @@
 ---
-description: "Create structured plans for any multi-step task -- software features, research workflows, events, study plans, or any goal that benefits..."
+description: "Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits fro..."
 argument-hint: "[optional: feature description, requirements doc path, plan path to deepen, or any task to plan]"
 ---
 

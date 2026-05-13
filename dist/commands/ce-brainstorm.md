@@ -1,5 +1,5 @@
 ---
-description: "Explore requirements and approaches through collaborative dialogue before writing a right-sized requirements document and planning implem..."
+description: "Explore requirements and approaches through collaborative dialogue, then write a right-sized requirements document."
 argument-hint: "[feature idea or problem to explore]"
 ---
 

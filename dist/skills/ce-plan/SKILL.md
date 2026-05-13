@@ -1,6 +1,6 @@
 ---
 name: ce-plan
-description: "Create structured plans for any multi-step task -- software features, research workflows, events, study plans, or any goal that benefits from structured breakdown. Also deepen existing plans with interactive review of sub-agent findings. Use for plan creation when the user says 'plan this', 'create a plan', 'write a tech plan', 'plan the implementation', 'how should we build', 'what's the approach for', 'break this down', 'plan a trip', 'create a study plan', or when a brainstorm/requirements document is ready for planning. Use for plan deepening when the user says 'deepen the plan', 'deepen my plan', 'deepening pass', or uses 'deepen' in reference to a plan. For exploratory or ambiguous requests where the user is unsure what to do, prefer ce-brainstorm first."
+description: "Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits from breakdown. Also deepens existing plans with interactive sub-agent review. Use when the user says 'plan this', 'create a plan', 'how should we build', 'break this down', or when a brainstorm doc is ready for planning. Use 'deepen the plan' or 'deepening pass' for the deepening flow. For exploratory requests, prefer ce-brainstorm first."
 argument-hint: "[optional: feature description, requirements doc path, plan path to deepen, or any task to plan]"
 ---
 
@@ -9,16 +9,32 @@ argument-hint: "[optional: feature description, requirements doc path, plan path
 
 > **ce-lite dispatch protocol.** This skill ships in the lightweight variant of
 > compound-engineering. The persistent agent registrations have been removed;
-> specialist persona prompts now live as data files at
-> `references/agent-prompts/<name>.md` (catalogued in
-> `references/agent-prompts/manifest.json`).
+> specialist persona prompts now live as data files **inside this plugin's
+> install directory** under `references/agent-prompts/<name>.md` (catalogued
+> in `references/agent-prompts/manifest.json`).
+>
+> **Locating the persona prompts.** The plugin's install path varies, and a
+> bare `references/agent-prompts/<name>.md` resolves relative to the user's
+> project — usually wrong. To find the correct path, use Glob with one of
+> these patterns (try in order; first non-empty result wins):
+>
+> 1. `**/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 2. `**/.claude/plugins/cache/*/ce-lite/*/references/agent-prompts/<name>.md`
+>    rooted at `~`
+> 3. As a fallback, run `find ~/.claude/plugins/cache -name '<name>.md' -path
+>    '*/agent-prompts/*' 2>/dev/null | head -1` via Bash.
+>
+> Cache the discovered plugin root (the directory containing
+> `.claude-plugin/plugin.json`) for subsequent persona lookups in this turn —
+> all personas live under the same root.
 >
 > Wherever this skill describes spawning a CE persona by name (e.g.
 > `ce-security-reviewer`, `ce-correctness-reviewer`, `ce-learnings-researcher`),
 > dispatch as follows:
 >
-> 1. Read the persona's prompt body from `references/agent-prompts/<name>.md`
->    (paths are listed in `manifest.json`).
+> 1. Read the persona's prompt body from the resolved
+>    `<plugin-root>/references/agent-prompts/<name>.md`.
 > 2. Spawn an `Agent` (or your harness's equivalent) with `subagent_type:
 >    "general-purpose"`. The persona prompt body becomes the prompt prefix; the
 >    skill's existing context bundle (intent, diff, base, file list, etc.) and
@@ -26,7 +42,10 @@ argument-hint: "[optional: feature description, requirements doc path, plan path
 > 3. Apply all dispatch-time options the skill specifies for the original named
 >    agent (model override, tools allowlist, parallel-scheduler limits, etc.).
 > 4. **Do not** call `Agent({subagent_type: "ce-<name>"})` — those
->    registrations do not exist in this variant.
+>    registrations do not exist in this variant. (The single allowed
+>    registration is `ce-specialist`, a router agent that internally selects
+>    a persona — orchestrator skills generally don't need to call it
+>    directly; they read persona prompts and dispatch via general-purpose.)
 >
 > Persona names elsewhere in this skill (descriptive prose, tables, status
 > messages) are documentation; only dispatch sites change.
@@ -208,13 +227,13 @@ If depth is unclear, ask one targeted question and then continue.
 
 #### 0.7 Solo-Mode Scope Summary
 
-**STOP. Before composing the synthesis, read `references/synthesis-summary.md`.** The discipline rules, prose-summary requirement, three-bucket structure, anti-pattern guidance, soft-cut behavior, self-redirect support, content focus for the solo variant, and bucket-content routing into plan body sections all live there. Composing a synthesis without these rules loaded reliably produces malformed output — missing prose summary, implementation-detail leakage, the proposal-pitch anti-pattern. This is not optional supplementary reading; it is the source of truth for how the phase behaves.
+**STOP. Before composing the synthesis, read `references/synthesis-summary.md`.** The two-stage shape (internal three-bucket draft → chat-time call-outs), the keep test that gates each call-out, the cap-and-recut rule, the conditional skip path, prose-summary requirement, anti-pattern guidance, soft-cut behavior, self-redirect support, content focus for the solo variant, and internal-draft routing into plan body sections all live there. Composing a synthesis without these rules loaded reliably produces malformed output — pasting the full internal draft verbatim into chat, implementation-detail leakage into call-outs, the proposal-pitch anti-pattern. **Call-outs must pass the affirmability test (can the user evaluate this without reading code?); over-share is the failure mode to avoid.** This is not optional supplementary reading; it is the source of truth for how the phase behaves.
 
-Surface a synthesis to the user — the agent's interpretation of scope after the brief Phase 0.4 bootstrap — so scope can be corrected **before Phase 1 research is spent**. Sub-agent dispatch (repo-research-analyst, learnings-researcher, etc.) is the expensive next step this phase guards against wasted effort on.
+Surface call-outs to the user — the specific forks in scope or approach where user input materially changes the plan — so scope can be corrected **before Phase 1 research is spent**. When zero call-outs survive the keep test, announce the auto-proceed and continue to Phase 1 without a blocking question. Sub-agent dispatch (repo-research-analyst, learnings-researcher, etc.) is the expensive next step this phase guards against wasted effort on.
 
 Fires **only in solo invocation** — when Phase 0.2 found no upstream brainstorm doc AND Phase 0.4 stayed in ce-plan (did not route to ce-debug, ce-work, or universal-planning) AND Phase 0.5 cleared (no unresolved blockers) AND not on Phase 0.1 fast paths (resume normal, deepen-intent). Each guard is an explicit conditional. Skip Phase 0.7 entirely when any guard fails — brainstorm-sourced invocations defer to Phase 5.1.5 instead.
 
-**Headless mode**: synthesis is composed but not confirmed (no synchronous user). Continue to Phase 1 research as normal. At plan-write time (Phase 5.2), Inferred bets route to a `## Assumptions` section in the plan instead of Key Technical Decisions. See `references/synthesis-summary.md` Headless mode for the full routing.
+**Headless mode**: internal draft is composed but stage 2 (chat-time call-outs) is skipped — no synchronous user to confirm to. Continue to Phase 1 research as normal. At plan-write time (Phase 5.2), Inferred bets from the internal draft route to a `## Assumptions` section in the plan instead of Key Technical Decisions. See `references/synthesis-summary.md` Headless mode for the full routing.
 
 ### Phase 1: Gather Context
 
@@ -512,287 +531,7 @@ Do not add these as boilerplate. Include them only when they improve execution q
 
 #### 4.2 Core Plan Template
 
-Omit clearly inapplicable optional sections, especially for Lightweight plans.
-
-```markdown
----
-title: [Plan Title]
-type: [feat|fix|refactor]
-status: active
-date: YYYY-MM-DD
-origin: docs/brainstorms/YYYY-MM-DD-<topic>-requirements.md  # include when planning from a requirements doc
-deepened: YYYY-MM-DD  # optional, set when the confidence check substantively strengthens the plan
----
-
-# [Plan Title]
-
-## Summary
-
-[1-3 line prose summary — what the plan is proposing, in plain language. Forward-looking. With an origin requirements doc, focus on HOW the implementation approaches the work (the WHAT is in origin); without one, carry both WHAT scope and HOW execution. Required for all tiers; skip only for truly-trivial plans (≤ 2 Requirements bullets that echo the prompt).]
-
----
-
-## Problem Frame
-
-[Backward-looking / situational: the user/business problem and context that motivates this plan. Establishes the pain — does NOT restate the proposal (that lives in Summary). With an origin requirements doc, keep this brief (1-2 sentences plus any plan-specific framing) and link to origin via Sources & References. Without one, carry the full pain narrative. **Omit entirely at Lightweight tier when Summary already carries the situational context** — a focused bug fix or one-line change rarely needs both sections.]
-
----
-
-<!-- Include ONLY in non-interactive (headless) mode when the agent had Inferred bets that
-     were not user-confirmed. Lists the un-validated agent inferences explicitly so downstream
-     review (ce-doc-review, ce-work, human PR review) can scrutinize them as bets, not as
-     authoritative decisions. Omit entirely in interactive mode — Inferred bets get user-
-     corrected in chat and become Key Technical Decisions or are revised away. -->
-## Assumptions
-
-*This plan was authored without synchronous user confirmation. The items below are agent inferences that fill gaps in the input — un-validated bets that should be reviewed before implementation proceeds.*
-
-- [Inferred item the agent chose without user confirmation]
-
----
-
-## Requirements
-
-- R1. [Requirement or success criterion this plan must satisfy]
-- R2. [Requirement or success criterion this plan must satisfy]
-
-<!-- With an origin requirements doc, R-IDs trace to origin's; without one, R-IDs are derived
-     during planning. The optional origin trace sub-blocks below carry forward what's relevant
-     when origin actors/flows/acceptance examples exist. -->
-
-**Origin actors:** [A1 (role/name), A2 (role/name), …]
-**Origin flows:** [F1 (flow name), F2 (flow name), …]
-**Origin acceptance examples:** [AE1 (covers R1, R4), AE2 (covers R3), …]
-
----
-
-## Scope Boundaries
-
-<!-- Default structure (no origin doc, or origin was Lightweight / Standard / Deep-feature):
-     a single bulleted list of explicit non-goals. The optional `### Deferred to Follow-Up Work`
-     subsection below may still be included when this plan's implementation is intentionally
-     split across other PRs/issues/repos. -->
-
-- [Explicit non-goal or exclusion]
-
-<!-- Optional plan-local subsection — include when this plan's implementation is intentionally
-     split across other PRs, issues, or repos. Distinct from origin-carried "Deferred for later"
-     (product sequencing) and "Outside this product's identity" (positioning). -->
-### Deferred to Follow-Up Work
-
-- [Work that will be done separately]: [Where or when -- e.g., "separate PR in repo-x", "future iteration"]
-
-<!-- Triggered structure: replace the single list above with the three subsections below ONLY
-     when the origin doc is Deep-product (detectable by presence of an "Outside this product's
-     identity" subsection in the origin's Scope Boundaries). At all other tiers and when no
-     origin exists, use the single-list structure above. -->
-
-<!--
-### Deferred for later
-
-[Carried from origin — product/version sequencing. Work that will be done eventually but not in v1.]
-
-- [Item]
-
-### Outside this product's identity
-
-[Carried from origin — positioning rejection. Adjacent product the plan must not accidentally build.]
-
-- [Item]
-
-### Deferred to Follow-Up Work
-
-[Plan-local — implementation work intentionally split across other PRs/issues/repos. Distinct from origin's "Deferred for later" (product) and "Outside this product's identity" (positioning).]
-
-- [Item]
--->
-
----
-
-## Context & Research
-
-### Relevant Code and Patterns
-
-- [Existing file, class, component, or pattern to follow]
-
-### Institutional Learnings
-
-- [Relevant `docs/solutions/` insight]
-
-### External References
-
-- [Relevant external docs or best-practice source, if used]
-
----
-
-## Key Technical Decisions
-
-- [Decision]: [Rationale]
-
-<!-- With an origin requirements doc, scope this section to plan-time architectural choices —
-     product-level decisions are in origin's Key Decisions. Without an origin, both belong here. -->
-
----
-
-## Open Questions
-
-<!-- With an origin requirements doc, scope this section to plan-time questions; product-level
-     open questions stay in origin's Outstanding Questions. -->
-
-### Resolved During Planning
-
-- [Question]: [Resolution]
-
-### Deferred to Implementation
-
-- [Question or unknown]: [Why it is intentionally deferred]
-
----
-
-<!-- Optional: Include when the plan creates a new directory structure (greenfield plugin,
-     new service, new package). Shows the expected output shape at a glance. Omit for plans
-     that only modify existing files. This is a scope declaration, not a constraint --
-     the implementer may adjust the structure if implementation reveals a better layout. -->
-## Output Structure
-
-    [directory tree showing new directories and files]
-
----
-
-<!-- Optional: Include this section only when the work involves DSL design, multi-component
-     integration, complex data flow, state-heavy lifecycle, or other cases where prose alone
-     would leave the approach shape ambiguous. Omit it entirely for well-patterned or
-     straightforward work. -->
-## High-Level Technical Design
-
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
-
-[Pseudo-code grammar, mermaid diagram, data flow sketch, or state diagram — choose the medium that best communicates the solution shape for this work.]
-
----
-
-## Implementation Units
-
-<!-- Each unit carries a stable plan-local U-ID (U1, U2, …) assigned sequentially.
-     U-IDs are never renumbered: reordering preserves them in place, splitting keeps the
-     original U-ID and assigns the next unused number to the new unit, deletion leaves
-     a gap. This anchor is what ce-work references in blockers and verification, so
-     stability across plan edits is load-bearing. -->
-
-### U1. [Name]
-
-**Goal:** [What this unit accomplishes]
-
-**Requirements:** [R1, R2]
-
-**Dependencies:** [None / U1 / external prerequisite]
-
-**Files:**
-- Create: `path/to/new_file`
-- Modify: `path/to/existing_file`
-- Test: `path/to/test_file`
-
-**Approach:**
-- [Key design or sequencing decision]
-
-**Execution note:** [Optional test-first, characterization-first, or other execution posture signal]
-
-**Technical design:** *(optional -- pseudo-code or diagram when the unit's approach is non-obvious. Directional guidance, not implementation specification.)*
-
-**Patterns to follow:**
-- [Existing file, class, or pattern]
-
-**Test scenarios:**
-<!-- Include only categories that apply to this unit. Omit categories that don't. For units with no behavioral change, use "Test expectation: none -- [reason]" instead of leaving this section blank. -->
-- [Scenario: specific input/action -> expected outcome. Prefix with category — Happy path, Edge case, Error path, or Integration — to signal intent]
-
-**Verification:**
-- [Outcome that should hold when this unit is complete]
-
----
-
-## System-Wide Impact
-
-- **Interaction graph:** [What callbacks, middleware, observers, or entry points may be affected]
-- **Error propagation:** [How failures should travel across layers]
-- **State lifecycle risks:** [Partial-write, cache, duplicate, or cleanup concerns]
-- **API surface parity:** [Other interfaces that may require the same change]
-- **Integration coverage:** [Cross-layer scenarios unit tests alone will not prove]
-- **Unchanged invariants:** [Existing APIs, interfaces, or behaviors that this plan explicitly does not change — and how the new work relates to them. Include when the change touches shared surfaces and reviewers need blast-radius assurance]
-
----
-
-## Risks & Dependencies
-
-| Risk | Mitigation |
-|------|------------|
-| [Meaningful risk] | [How it is addressed or accepted] |
-
----
-
-## Documentation / Operational Notes
-
-- [Docs, rollout, monitoring, or support impacts when relevant]
-
----
-
-## Sources & References
-
-- **Origin document:** [docs/brainstorms/YYYY-MM-DD-<topic>-requirements.md](path)
-- Related code: [path or symbol]
-- Related PRs/issues: #[number]
-- External docs: [url]
-```
-
-For larger `Deep` plans, extend the core template only when useful with sections such as:
-
-```markdown
-## Alternative Approaches Considered
-
-- [Approach]: [Why rejected or not chosen]
-
----
-
-## Success Metrics
-
-- [How we will know this solved the intended problem]
-
----
-
-## Dependencies / Prerequisites
-
-- [Technical, organizational, or rollout dependency]
-
----
-
-## Risk Analysis & Mitigation
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| [Risk] | [Low/Med/High] | [Low/Med/High] | [How addressed] |
-
----
-
-## Phased Delivery
-
-### Phase 1
-- [What lands first and why]
-
-### Phase 2
-- [What follows and why]
-
----
-
-## Documentation Plan
-
-- [Docs or runbooks to update]
-
----
-
-## Operational / Rollout Notes
-
-- [Monitoring, migration, feature flag, or rollout considerations]
-```
+Read `references/plan-template.md` for the core plan template (frontmatter, all standard sections, fill-in placeholders) and the optional Deep extensions template (Alternative Approaches Considered, Success Metrics, Dependencies, Risk Analysis, Phased Delivery, Documentation Plan, Operational Notes). Omit clearly inapplicable optional sections — especially for Lightweight plans.
 
 #### 4.3 Planning Rules
 
@@ -841,13 +580,13 @@ If the plan originated from a requirements document, re-read that document and v
 
 #### 5.1.5 Brainstorm-Sourced Scope Summary
 
-**STOP. Before composing the synthesis, read `references/synthesis-summary.md`.** The discipline rules, prose-summary requirement, three-bucket structure, anti-pattern guidance, soft-cut behavior, self-redirect support, content focus for the brainstorm-sourced variant, doc-body reading rules, and bucket-content routing into plan body sections all live there. Composing a synthesis without these rules loaded reliably produces malformed output — missing prose summary, implementation-detail leakage, the proposal-pitch anti-pattern. This is not optional supplementary reading; it is the source of truth for how the phase behaves.
+**STOP. Before composing the synthesis, read `references/synthesis-summary.md`.** The two-stage shape (internal three-bucket draft → chat-time call-outs), the keep test that gates each call-out, the cap-and-recut rule, the conditional skip path, prose-summary requirement, anti-pattern guidance, soft-cut behavior, self-redirect support, content focus for the brainstorm-sourced variant, doc-body reading rules, and internal-draft routing into plan body sections all live there. Composing a synthesis without these rules loaded reliably produces malformed output — pasting the full internal draft verbatim into chat, implementation-detail leakage into call-outs, the proposal-pitch anti-pattern. **Call-outs must pass the affirmability test (can the user evaluate this without reading code?); over-share is the failure mode to avoid.** This is not optional supplementary reading; it is the source of truth for how the phase behaves.
 
-Surface the agent's plan-time decisions to the user before Phase 5.2 commits the plan to disk — the latest cheap moment to catch plan-time scope errors. The brainstorm already validated WHAT to build; this phase surfaces HOW the plan will execute.
+Surface plan-time call-outs to the user before Phase 5.2 commits the plan to disk — the latest cheap moment to catch plan-time scope errors. When zero call-outs survive the keep test, announce the auto-proceed and continue to Phase 5.2. The brainstorm already validated WHAT to build; this phase surfaces HOW the plan will execute on the forks that matter.
 
 Fires **only when the plan was sourced from an upstream brainstorm doc** (Phase 0.2 found a `*-requirements.md` match) AND not on Phase 0.1 fast paths (resume normal, deepen-intent). Skip Phase 5.1.5 in solo invocation — solo plans handled their synthesis in Phase 0.7.
 
-**Headless mode**: synthesis is composed but not confirmed (no synchronous user). Proceed to Phase 5.2 plan-write. Inferred bets route to a `## Assumptions` section in the plan instead of Key Technical Decisions. See `references/synthesis-summary.md` Headless mode for the full routing.
+**Headless mode**: internal draft is composed but stage 2 (chat-time call-outs) is skipped — no synchronous user to confirm to. Proceed to Phase 5.2 plan-write. Inferred bets from the internal draft route to a `## Assumptions` section in the plan instead of Key Technical Decisions. See `references/synthesis-summary.md` Headless mode for the full routing.
 
 #### 5.2 Write Plan File
 
