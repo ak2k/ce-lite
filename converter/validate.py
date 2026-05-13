@@ -15,6 +15,10 @@ Run after extract.py + rewrite.py. Asserts:
    SKILL.md must be in the manifest. Strays here indicate either upstream-drift
    (new agent type whose name shape isn't covered by the regex) or bug in
    extraction. Either way, the build fails until investigated.
+10. Every SKILL.md in dist/skills/ has a matching command wrapper in
+    dist/commands/, and vice versa — no orphans either direction. Plugin-
+    namespaced skill autocomplete entries don't reliably dispatch on submit;
+    commands/ wrappers do. generate_commands.py is the stage that emits them.
 """
 
 from __future__ import annotations
@@ -315,6 +319,51 @@ def check_skills(dist: Path, manifest_names: set[str]) -> None:
             )
 
 
+def check_commands(dist: Path) -> None:
+    """Every SKILL.md must have a matching commands/<name>.md and vice versa.
+
+    Slash-command wrappers in commands/ are what make `/ce-plan`, `/ce-work`,
+    `/ce-ask-<persona>` actually dispatch — Claude Code's plugin-namespaced
+    skill autocomplete (`/ce-lite:ce-plan`) shows entries but is unreliable
+    on submit. generate_commands.py emits one wrapper per skill; this check
+    fails loud if either side has orphans (skill without command = broken
+    slash entry, command without skill = stale generation).
+    """
+    skills_dir = dist / "skills"
+    commands_dir = dist / "commands"
+    if not commands_dir.is_dir():
+        fail(
+            f"missing {commands_dir} — generate_commands.py must run between "
+            f"generate_wrappers.py and validate.py in the converter pipeline"
+        )
+
+    skill_names = {p.parent.name for p in skills_dir.glob("*/SKILL.md")}
+    command_names = {p.stem for p in commands_dir.glob("*.md")}
+
+    only_in_skills = skill_names - command_names
+    only_in_commands = command_names - skill_names
+    if only_in_skills or only_in_commands:
+        msg = []
+        if only_in_skills:
+            msg.append(f"skills without command wrappers: {sorted(only_in_skills)}")
+        if only_in_commands:
+            msg.append(f"command wrappers with no matching skill: {sorted(only_in_commands)}")
+        fail(f"dist/commands/ ↔ dist/skills/ mismatch: {'; '.join(msg)}")
+
+    # Sanity-check each command file has the expected frontmatter shape.
+    for cmd_path in sorted(commands_dir.glob("*.md")):
+        text = cmd_path.read_text(encoding="utf-8")
+        try:
+            fm, _ = parse_frontmatter(text)
+        except ValueError as exc:
+            fail(f"{cmd_path.relative_to(dist)}: {exc}")
+        if not fm.get("description"):
+            fail(
+                f"{cmd_path.relative_to(dist)}: missing or empty 'description' in "
+                f"frontmatter (required by the harness for autocomplete display)"
+            )
+
+
 def normalize_body(text: str) -> str:
     """Trailing-whitespace normalization for body-equivalence checks.
 
@@ -430,6 +479,9 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
 
         check_skills(dist, manifest_names)
         print(f"  skills: all SKILL.md files structurally valid; orchestrators have preambles", file=sys.stderr)
+
+        check_commands(dist)
+        print(f"  commands: every skill has a matching slash-command wrapper", file=sys.stderr)
 
         if upstream_dir:
             upstream = Path(upstream_dir).resolve()
