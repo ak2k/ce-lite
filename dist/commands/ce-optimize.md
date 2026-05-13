@@ -1,5 +1,5 @@
 ---
-description: "Run metric-driven iterative optimization loops."
+description: "Run metric-driven iterative optimization loops -- define a measurable goal, run parallel experiments, measure each against hard gates or..."
 argument-hint: "[path to optimization spec YAML, or describe the optimization goal]"
 ---
 
