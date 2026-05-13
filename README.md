@@ -30,11 +30,13 @@ During trial, slash commands are namespaced under `/ce-lite:*` so the original `
 
 ## Build pipeline
 
-1. **`converter/extract.py`** — read `agents/*.md` from upstream CE, relocate bodies to `dist/references/agent-prompts/<name>.md`, build `manifest.json`.
-2. **`converter/rewrite.py`** — pattern-based regex transform of `commands/ce/*.md`. Replace dispatch mentions with explicit `Task` calls. **Fail loud** on unrecognized agent mentions.
-3. **`converter/validate.py`** — structural assertions over the output (no orphan refs, every Task call points at a real prompt file, manifest count matches file count, etc.).
-4. **`smoke.sh`** — `nix flake check` + diff vs. last-published version.
-5. **GH Action** — daily cron polls upstream tag; if newer, runs converter; opens PR if all green; fails red if any step breaks.
+1. **`converter/extract.py`** — read `agents/*.agent.md` from upstream CE, relocate bodies to `dist/references/agent-prompts/<name>.md`, build `manifest.json`, copy non-agent files (`skills/`, `.claude-plugin/`, etc.) through.
+2. **`converter/rewrite.py`** — insert the ce-lite dispatch protocol preamble into every orchestrator SKILL.md that mentions a manifest agent. **Fail loud** on unrecognized agent mentions.
+3. **`converter/generate_wrappers.py`** — emit 49 `ce-ask-<persona>` wrapper skills + the `ce-ask` discovery meta-skill + `ce-ask-panel` + the `UserPromptSubmit` keyword-routing hook.
+4. **`converter/generate_commands.py`** — emit `dist/commands/<name>.md` slash-command wrappers, one per skill. Without these the `/ce-plan`, `/ce-work`, `/ce-ask-*` entry points only appear in autocomplete; submit doesn't reliably dispatch.
+5. **`converter/validate.py`** — structural assertions over the output (no orphan refs, every Task call points at a real prompt file, manifest count matches file count, every skill has a matching command wrapper, etc.).
+6. **`nix flake check`** — formatting, action lint, unit tests.
+7. **GH Action** — daily cron polls upstream tag; if newer, runs converter; opens PR if all green; fails red if any step breaks.
 
 No LLM in the CI loop. All transforms deterministic.
 
