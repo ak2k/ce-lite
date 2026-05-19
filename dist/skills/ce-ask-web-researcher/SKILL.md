@@ -44,7 +44,7 @@ user's project — see discovery instructions below).
 
    You are operating as the ce-web-researcher specialist. Your role is defined
    in the prompt body above. Manifest declares this role uses
-   tools=[WebSearch, WebFetch] and model=sonnet. Honour those constraints:
+   tools=[any] and model=sonnet. Honour those constraints:
    if a task pulls you toward tools outside that set, stop and explain why
    your role requires it — don't silently broaden scope.
    ```

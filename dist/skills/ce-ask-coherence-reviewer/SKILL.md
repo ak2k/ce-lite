@@ -44,7 +44,7 @@ user's project — see discovery instructions below).
 
    You are operating as the ce-coherence-reviewer specialist. Your role is defined
    in the prompt body above. Manifest declares this role uses
-   tools=[Read, Grep, Glob, Bash] and model=haiku. Honour those constraints:
+   tools=[Read, Grep, Glob] and model=haiku. Honour those constraints:
    if a task pulls you toward tools outside that set, stop and explain why
    your role requires it — don't silently broaden scope.
    ```
