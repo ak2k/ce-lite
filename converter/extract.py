@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -188,8 +189,61 @@ def copy_non_agent_files(plugin_root: Path, dist_dir: Path) -> None:
             shutil.copy2(entry, dest)
 
 
-def rewrite_plugin_json(dist_dir: Path, upstream_tag: str | None) -> None:
+def lite_suffix_from_git(repo_root: Path, new_upstream_tag: str) -> str:
+    """Compute the lite version suffix from git history.
+
+    Returns `'-lite'` when this conversion is the first for `new_upstream_tag`
+    (i.e., the prior `.last-processed` content differs, or none exists), and
+    `'-lite.N'` otherwise — where N is the number of commits touching
+    `converter/` since the commit that last set `.last-processed` to the
+    current upstream tag.
+
+    Lets converter-only changes ship as `/plugin update`-visible bumps
+    (`3.8.3-lite` → `3.8.3-lite.1` → `3.8.3-lite.2`, …) by re-running
+    `publish-dist` against the unchanged upstream tag. When the upstream
+    tag actually changes, N resets to 0 → bare `-lite`.
+
+    Falls back to bare `-lite` on any error (no git, no history, not a
+    repo) so the converter still produces a valid version string in
+    weird invocation contexts (eval'd in tests, ad-hoc local runs).
+    """
+    if not new_upstream_tag:
+        return "-lite"
+    last_processed = repo_root / ".last-processed"
+    if not last_processed.is_file():
+        return "-lite"
+    if last_processed.read_text(encoding="utf-8").strip() != new_upstream_tag:
+        # Cross-upstream bump → reset counter.
+        return "-lite"
+    try:
+        last_bump = subprocess.check_output(
+            ["git", "-C", str(repo_root), "log", "-n", "1",
+             "--format=%H", "--", ".last-processed"],
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+        if not last_bump:
+            return "-lite"
+        count = int(subprocess.check_output(
+            ["git", "-C", str(repo_root), "rev-list", "--count",
+             f"{last_bump}..HEAD", "--", "converter/"],
+            text=True, stderr=subprocess.DEVNULL,
+        ).strip())
+    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+        return "-lite"
+    return "-lite" if count == 0 else f"-lite.{count}"
+
+
+def rewrite_plugin_json(
+    dist_dir: Path,
+    upstream_tag: str | None,
+    repo_root: Path | None = None,
+) -> None:
     """Rename the plugin to ce-lite-<...> in .claude-plugin/plugin.json.
+
+    Version suffix is derived from git history via `lite_suffix_from_git`
+    so converter-only changes can ship as `-lite.N` bumps between upstream
+    releases. `repo_root` defaults to this script's parent's parent (the
+    ce-lite checkout root); tests override it.
 
     Codex/Cursor manifests left untouched for parity for now (they aren't the
     Claude Code install path, and namespace concerns differ per platform).
@@ -200,7 +254,10 @@ def rewrite_plugin_json(dist_dir: Path, upstream_tag: str | None) -> None:
     data = json.loads(plugin_json.read_text(encoding="utf-8"))
     upstream_version = data.get("version", "0.0.0")
     data["name"] = LITE_NAME
-    data["version"] = f"{upstream_version}-lite"
+    if repo_root is None:
+        repo_root = Path(__file__).resolve().parent.parent
+    suffix = lite_suffix_from_git(repo_root, upstream_tag or "")
+    data["version"] = f"{upstream_version}{suffix}"
     data["description"] = (
         "Lightweight-delegation variant of compound-engineering. "
         "Agent registrations removed; specialist prompts loaded on demand from "

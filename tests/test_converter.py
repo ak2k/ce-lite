@@ -1193,3 +1193,90 @@ def test_resolver_runtime_prefix_handles_null_tools(tmp_path: Path):
     )
     assert proc.returncode == 0, f"stderr={proc.stderr!r}"
     assert "tools=[any]" in proc.stdout
+
+
+# -------- lite_suffix_from_git (auto -lite.N bump) --------
+#
+# Lets converter-only changes ship as `/plugin update`-visible bumps without
+# waiting for an upstream EveryInc release. N = converter-touching commits
+# since the last commit that set .last-processed to the current upstream
+# tag. Cross-upstream bumps reset N to 0 → bare '-lite'.
+
+import subprocess as _suff_subp  # noqa: E402
+
+from extract import lite_suffix_from_git  # noqa: E402
+
+
+def _init_repo(repo: Path) -> None:
+    """Initialise a minimal git repo for suffix tests."""
+    _suff_subp.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    _suff_subp.run(["git", "-C", str(repo), "config", "user.email", "t@t"], check=True)
+    _suff_subp.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
+    _suff_subp.run(["git", "-C", str(repo), "config", "commit.gpgsign", "false"], check=True)
+
+
+def _commit(repo: Path, path: str, content: str, msg: str) -> None:
+    full = repo / path
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_text(content)
+    _suff_subp.run(["git", "-C", str(repo), "add", path], check=True)
+    _suff_subp.run(["git", "-C", str(repo), "commit", "-q", "-m", msg], check=True)
+
+
+def test_lite_suffix_no_last_processed_returns_bare(tmp_path: Path):
+    """First-ever conversion: .last-processed doesn't exist yet."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, "README.md", "x", "initial")
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite"
+
+
+def test_lite_suffix_cross_upstream_returns_bare(tmp_path: Path):
+    """Bumping to a different upstream tag → N resets to 0."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.1\n", "v3.8.1")
+    _commit(tmp_path, "converter/extract.py", "x", "converter change")
+    # Now extracting against v3.8.3 (different from .last-processed's v3.8.1)
+    # → bare suffix, N reset
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite"
+
+
+def test_lite_suffix_same_upstream_no_converter_commits_returns_bare(tmp_path: Path):
+    """Re-running publish-dist for the same upstream with no converter
+    changes since the last bump → '-lite' (N=0)."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3")
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite"
+
+
+def test_lite_suffix_counts_converter_commits_since_last_bump(tmp_path: Path):
+    """N counts only converter-touching commits since .last-processed
+    was last set to the current upstream tag."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3 bump")
+    _commit(tmp_path, "converter/extract.py", "x", "converter change 1")
+    _commit(tmp_path, "README.md", "y", "non-converter change")
+    _commit(tmp_path, "converter/rewrite.py", "z", "converter change 2")
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite.2"
+
+
+def test_lite_suffix_dist_only_commits_dont_count(tmp_path: Path):
+    """Commits touching only dist/ (regenerated output) don't bump N —
+    only converter/ commits do."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3")
+    _commit(tmp_path, "dist/foo.md", "x", "regen dist")
+    _commit(tmp_path, "dist/bar.md", "y", "regen dist 2")
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite"
+
+
+def test_lite_suffix_falls_back_outside_git_repo(tmp_path: Path):
+    """tmp_path is not a git repo → bare '-lite' (no crash)."""
+    (tmp_path / ".last-processed").write_text("compound-engineering-v3.8.3\n")
+    assert lite_suffix_from_git(tmp_path, "compound-engineering-v3.8.3") == "-lite"
+
+
+def test_lite_suffix_empty_upstream_tag(tmp_path: Path):
+    """Defensive: empty/missing upstream_tag arg → bare '-lite'."""
+    _init_repo(tmp_path)
+    _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3")
+    assert lite_suffix_from_git(tmp_path, "") == "-lite"
