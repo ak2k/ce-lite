@@ -33,17 +33,10 @@ is the persona name; everything after is the task context.
 3. **Persona name + task** — dispatch via `Agent` with
    `subagent_type: "general-purpose"` and
    `description: "<persona>: <task summary>"` (meaningful trace label).
-   The prompt is `ce-lite-persona <persona> --body` output followed by:
-
-   ```
-   [ce-persona=<persona> via=ce-ask-meta]
-
-   You are operating as the <persona> specialist. Honour the manifest's
-   tools/model constraints; if a task pulls you toward tools outside that
-   set, stop and explain why your role requires it.
-   ```
-
-   Then a blank line and the user task.
+   The prompt is the output of
+   `ce-lite-persona <persona> --prefix --via ce-ask-meta`, a blank line,
+   then the user task. The task is concatenated into the Agent.prompt
+   parameter directly — not passed to the resolver.
 
 ## Notes
 

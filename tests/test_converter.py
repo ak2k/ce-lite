@@ -307,8 +307,11 @@ def test_render_wrapper_includes_trace_tag():
     assert "[ce-persona=ce-x via=ce-ask-direct]" in out
 
 
-def test_render_wrapper_includes_tool_restriction_preamble():
-    """Tools field becomes loud-advisory in the dispatched prompt."""
+def test_render_wrapper_delegates_to_resolver_prefix():
+    """Phase B.10: tool-restriction preamble moves into the resolver's --prefix
+    output. The SKILL.md body just calls ce-lite-persona <name> --prefix and
+    concatenates with the task. Wrapper body must NOT embed the tool list
+    inline (that'd duplicate the resolver's job and break on null tools)."""
     p = Persona(
         name="ce-x",
         description="x",
@@ -317,21 +320,13 @@ def test_render_wrapper_includes_tool_restriction_preamble():
         prompt_path="references/agent-prompts/ce-x.md",
     )
     out = render_wrapper(p, "x")
-    assert "tools=[Read, Grep, Glob]" in out
-    assert "stop and explain why" in out
-
-
-def test_render_wrapper_handles_null_tools():
-    """tools: null in manifest -> 'tools=[any]' in body, no crash."""
-    p = Persona(
-        name="ce-x",
-        description="x",
-        model="inherit",
-        tools=None,
-        prompt_path="references/agent-prompts/ce-x.md",
-    )
-    out = render_wrapper(p, "x")
-    assert "tools=[any]" in out
+    # Resolver is called with --prefix
+    assert "ce-lite-persona ce-x --prefix" in out
+    # Tool list NOT inline in wrapper body (resolver emits it at runtime)
+    assert "tools=[Read, Grep, Glob]" not in out
+    # Body still references tool restriction conceptually (so reader knows
+    # the resolver is doing it)
+    assert "tool-restriction" in out.lower() or "tool restriction" in out.lower()
 
 
 def test_render_wrapper_frontmatter_quotes_special_characters():
@@ -416,15 +411,15 @@ def test_render_panel_includes_generated_marker():
 
 
 def test_render_panel_dispatches_with_panel_via_tag():
-    """The dispatch preamble template uses via=ce-ask-panel.
+    """Panel skill instructs the resolver to record via=ce-ask-panel in the
+    trace tag.
 
-    via=ce-ask-direct may appear elsewhere in the body as documentation
-    (contrasting the two trace-tag values) — that's expected and fine; the
-    invariant is that the preamble template Claude actually embeds in each
-    dispatched prompt is the panel form.
+    Phase B.10: the trace tag is emitted by the resolver (not inline in the
+    SKILL.md body) — the wrapper just passes `--via ce-ask-panel`. via=ce-ask-direct
+    may still appear in documentation prose contrasting the two values.
     """
     out = render_panel([])
-    assert "[ce-persona=<persona> via=ce-ask-panel]" in out
+    assert "--via ce-ask-panel" in out
 
 
 def test_render_panel_argument_hint_in_frontmatter():
@@ -505,9 +500,10 @@ def test_render_meta_skill_includes_marker():
 
 
 def test_render_meta_skill_via_tag_distinguishes():
-    """Distinct via= value separates meta-skill dispatch from per-skill."""
+    """Meta-skill instructs the resolver to record via=ce-ask-meta in the
+    trace tag (passed as --via ce-ask-meta on the resolver call)."""
     out = render_meta_skill()
-    assert "via=ce-ask-meta" in out
+    assert "--via ce-ask-meta" in out
 
 
 def test_meta_skill_description_substantive():
@@ -518,14 +514,20 @@ def test_meta_skill_description_substantive():
 
 
 def test_three_routing_layers_have_distinct_via_tags():
-    """Sanity: the three remaining routing surfaces have distinct trace tags."""
+    """Sanity: the three routing surfaces pass distinct --via values to the
+    resolver. Phase B.10 moved the trace tag emission into the resolver; the
+    SKILL.md bodies just pass `--via <source>` to record it."""
     p = Persona(
         name="ce-x", description="x", model="inherit", tools=None,
         prompt_path="references/agent-prompts/ce-x.md",
     )
-    via_direct = "via=ce-ask-direct" in render_wrapper(p, "x")
-    via_panel = "via=ce-ask-panel" in render_panel([])
-    via_meta = "via=ce-ask-meta" in render_meta_skill()
+    # Direct wrapper either passes --via ce-ask-direct or relies on the
+    # resolver default (which is ce-ask-direct). Both forms are valid; just
+    # verify the source is named in the body.
+    direct_body = render_wrapper(p, "x")
+    via_direct = "ce-ask-direct" in direct_body
+    via_panel = "--via ce-ask-panel" in render_panel([])
+    via_meta = "--via ce-ask-meta" in render_meta_skill()
     assert via_direct and via_panel and via_meta
 
 
@@ -1045,8 +1047,10 @@ def test_resolver_runtime_honours_claude_plugin_root(tmp_path: Path):
 # -------- wrapper templates reference the resolver shim --------
 
 
-def test_render_wrapper_invokes_resolver(persona_factory=None):
-    """Wrapper bodies must call ce-lite-persona, not embed Glob/find scaffolding."""
+def test_render_wrapper_invokes_resolver_prefix():
+    """Phase B.10: wrappers call --prefix (not --body) — emits full prompt
+    prefix (body + trace tag + tool restriction) in one resolver call. Saves
+    ~15 lines of inline preamble per wrapper body."""
     from generate_wrappers import Persona, render_wrapper
     p = Persona(
         name="ce-security-sentinel",
@@ -1056,34 +1060,40 @@ def test_render_wrapper_invokes_resolver(persona_factory=None):
         prompt_path="references/agent-prompts/ce-security-sentinel.md",
     )
     out = render_wrapper(p, "Use when reviewing security.")
-    assert "ce-lite-persona ce-security-sentinel" in out
+    assert "ce-lite-persona ce-security-sentinel --prefix" in out
     # No glob/find scaffolding left over
     assert ".claude/plugins/cache" not in out
     assert "find ~/" not in out
 
 
-def test_render_panel_invokes_resolver():
-    """Panel skill must also use the resolver — same dispatch path."""
+def test_render_panel_invokes_resolver_prefix():
+    """Panel skill uses --prefix with --via ce-ask-panel so trace tags
+    distinguish panel dispatch from direct."""
     from generate_wrappers import render_panel
     out = render_panel([])
     assert "ce-lite-persona" in out
+    assert "--prefix" in out
+    assert "--via ce-ask-panel" in out
     assert ".claude/plugins/cache" not in out
 
 
 def test_render_meta_skill_invokes_resolver():
-    """Meta-skill (`/ce-ask`) must use resolver --list and --body."""
+    """Meta-skill (`/ce-ask`) uses --list (mode 1) and --prefix --via
+    ce-ask-meta (mode 3 dispatch)."""
     from generate_wrappers import render_meta_skill
     out = render_meta_skill()
     assert "ce-lite-persona --list" in out
-    assert "ce-lite-persona" in out
+    assert "--prefix" in out
+    assert "--via ce-ask-meta" in out
     assert ".claude/plugins/cache" not in out
 
 
-def test_rewrite_preamble_references_resolver():
-    """Orchestrator dispatch-protocol preamble must reference the resolver,
-    NOT the legacy Glob/find scaffolding."""
+def test_rewrite_preamble_references_resolver_prefix():
+    """Orchestrator preamble teaches dispatch via --prefix with an
+    orchestrator-specific --via tag, NOT the legacy inline preamble."""
     from rewrite import PREAMBLE
     assert "ce-lite-persona" in PREAMBLE
+    assert "--prefix" in PREAMBLE
     assert "general-purpose" in PREAMBLE  # still the default dispatch type
     # Legacy Glob/find scaffolding must be gone
     assert ".claude/plugins/cache" not in PREAMBLE
@@ -1096,3 +1106,90 @@ def test_rewrite_preamble_keeps_meaningful_description_guidance():
     from rewrite import PREAMBLE
     assert "description" in PREAMBLE.lower()
     assert "trace" in PREAMBLE.lower() or "readable" in PREAMBLE.lower()
+
+
+# -------- --prefix and --via runtime behavior (Phase B.10) --------
+
+
+def test_resolver_runtime_prefix_emits_body_plus_preamble(tmp_path: Path):
+    rc, out, err = _run_resolver(tmp_path, ["ce-security-sentinel", "--prefix"])
+    assert rc == 0, f"stderr={err!r}"
+    # Body is included verbatim
+    assert "security persona body" in out
+    # Trace tag is emitted with default --via=ce-ask-direct
+    assert "[ce-persona=ce-security-sentinel via=ce-ask-direct]" in out
+    # Tool-restriction self-policing preamble appears
+    assert "tools=[Read, Grep]" in out
+    assert "model=inherit" in out
+    assert "stop and explain why" in out
+
+
+def test_resolver_runtime_prefix_honours_via_override(tmp_path: Path):
+    rc, out, err = _run_resolver(
+        tmp_path, ["ce-security-sentinel", "--prefix", "--via", "ce-code-review"]
+    )
+    assert rc == 0, f"stderr={err!r}"
+    assert "[ce-persona=ce-security-sentinel via=ce-code-review]" in out
+    # Default tag must NOT appear when --via overrides
+    assert "via=ce-ask-direct" not in out
+
+
+def test_resolver_runtime_prefix_rejects_unknown_via(tmp_path: Path):
+    """Defence against typos: --via is a closed set."""
+    rc, out, err = _run_resolver(
+        tmp_path, ["ce-security-sentinel", "--prefix", "--via", "ce-fake-source"]
+    )
+    assert rc != 0
+    assert "unknown" in err.lower() and "via" in err.lower()
+    assert "ce-ask-direct" in err  # error message lists known sources
+
+
+def test_resolver_runtime_prefix_safe_for_arbitrary_task_content(tmp_path: Path):
+    """The task NEVER passes through argv on a --prefix call; only the
+    persona name and dispatch source do. This test documents the
+    quote-safety property by verifying that --prefix takes no task arg."""
+    import subprocess as _subp
+    # Even if we tried to pass a task as an extra positional, argparse rejects
+    rc, _, err = _run_resolver(
+        tmp_path,
+        ["ce-security-sentinel", "--prefix", "unexpected-extra-arg"],
+    )
+    # argparse exit code is 2 on unrecognized args; we want non-zero either way
+    assert rc != 0
+    assert "unrecognized" in err.lower() or "arguments" in err.lower()
+
+
+def test_resolver_runtime_prefix_handles_null_tools(tmp_path: Path):
+    """Persona with no tool restriction in manifest -> 'tools=[any]' in prefix output."""
+    # Override the manifest to a persona with tools=None
+    plugin_root = tmp_path / "plugin"
+    plugin_root.mkdir(parents=True, exist_ok=True)
+    (plugin_root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+    (plugin_root / ".claude-plugin" / "plugin.json").write_text('{"name":"x","version":"1"}')
+    prompts_dir = plugin_root / "references" / "agent-prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    (prompts_dir / "ce-no-tools-persona.md").write_text("body text\n")
+    manifest = {
+        "schema_version": 1,
+        "agent_count": 1,
+        "agents": [{
+            "name": "ce-no-tools-persona",
+            "description": "x",
+            "model": "inherit",
+            "tools": None,
+            "prompt_path": "references/agent-prompts/ce-no-tools-persona.md",
+        }],
+    }
+    (prompts_dir / "manifest.json").write_text(_json.dumps(manifest))
+    bin_dir = plugin_root / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    resolver = bin_dir / "ce-lite-persona"
+    resolver.write_text(render_persona_resolver(), encoding="utf-8")
+    resolver.chmod(0o755)
+    import subprocess as _subp
+    proc = _subp.run(
+        ["python3", str(resolver), "ce-no-tools-persona", "--prefix"],
+        capture_output=True, text=True, env=os.environ.copy(), timeout=10,
+    )
+    assert proc.returncode == 0, f"stderr={proc.stderr!r}"
+    assert "tools=[any]" in proc.stdout
