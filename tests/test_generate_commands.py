@@ -2,7 +2,6 @@
 
 Covers the pieces that would silently produce wrong output:
 
-- shorten_description: first-sentence cut, hard truncate, empty input
 - render_command: frontmatter shape with/without argument-hint, body format
 - collect_skills: fail-loud on missing name or dir/name mismatch
 - write_commands: idempotent clean-and-rewrite of dist/commands/, one file per skill
@@ -19,59 +18,20 @@ CONVERTER_DIR = Path(__file__).resolve().parent.parent / "converter"
 sys.path.insert(0, str(CONVERTER_DIR))
 
 from generate_commands import (  # noqa: E402
-    MAX_DESCRIPTION_LEN,
     collect_skills,
     render_command,
-    shorten_description,
     write_commands,
 )
-
-
-# -------- shorten_description --------
-
-
-def test_shorten_description_empty():
-    assert shorten_description("") == ""
-
-
-def test_shorten_description_short_passthrough():
-    text = "Execute work efficiently while maintaining quality."
-    assert shorten_description(text) == text
-
-
-def test_shorten_description_first_sentence_cut():
-    text = "Create a plan. Then iterate on it. Then commit."
-    # First sentence ends at index 13 (". "), well under MAX_DESCRIPTION_LEN
-    assert shorten_description(text) == "Create a plan."
-
-
-def test_shorten_description_no_period_hard_truncate():
-    text = "a" * 200
-    out = shorten_description(text)
-    assert len(out) == MAX_DESCRIPTION_LEN
-    assert out.endswith("...")
-
-
-def test_shorten_description_long_first_sentence_falls_through_to_truncate():
-    # First sentence longer than MAX_DESCRIPTION_LEN — the period-cut shouldn't
-    # fire (it only fires when period is within the cap). Truncate kicks in.
-    text = "x" * 150 + ". another sentence."
-    out = shorten_description(text)
-    assert len(out) == MAX_DESCRIPTION_LEN
-    assert out.endswith("...")
-
-
-def test_shorten_description_collapses_whitespace():
-    text = "Plan   tasks\n  with    structure."
-    assert shorten_description(text) == "Plan tasks with structure."
 
 
 # -------- render_command --------
 
 
 def test_render_command_minimal_no_argument_hint():
-    body = render_command("ce-plan", "Plan tasks with structure.", None)
-    assert 'description: "Plan tasks with structure."' in body
+    body = render_command("ce-plan", None)
+    # Description is the skill name itself — see generate_commands.py comment
+    # for why we deliberately don't carry the SKILL.md description blurb here.
+    assert 'description: "ce-plan"' in body
     assert "argument-hint" not in body
     assert "Use the `ce-plan` skill" in body
     assert "$ARGUMENTS" in body
@@ -81,16 +41,15 @@ def test_render_command_minimal_no_argument_hint():
 def test_render_command_with_argument_hint():
     body = render_command(
         "ce-work",
-        "Execute work.",
         "[Plan doc path or description of work]",
     )
-    assert 'description: "Execute work."' in body
+    assert 'description: "ce-work"' in body
     assert 'argument-hint: "[Plan doc path or description of work]"' in body
     assert "Use the `ce-work` skill" in body
 
 
 def test_render_command_frontmatter_well_formed():
-    body = render_command("ce-x", "desc", "hint")
+    body = render_command("ce-x", "hint")
     # Frontmatter fence shape: starts with --- on its own line, then keys, then ---
     lines = body.split("\n")
     assert lines[0] == "---"
@@ -99,10 +58,12 @@ def test_render_command_frontmatter_well_formed():
     assert lines[3] == "---"
 
 
-def test_render_command_handles_quotes_in_description():
-    # JSON encoding handles embedded quotes safely
-    body = render_command("ce-x", 'Run "the thing" carefully.', None)
-    assert 'description: "Run \\"the thing\\" carefully."' in body
+def test_render_command_description_is_always_the_skill_name():
+    # Even if a caller passes an argument-hint with quoted content, the
+    # description field stays pinned to the skill name (JSON-quoted).
+    body = render_command("ce-foo", 'with "quoted" hint')
+    assert 'description: "ce-foo"' in body
+    assert 'argument-hint: "with \\"quoted\\" hint"' in body
 
 
 # -------- collect_skills --------
@@ -132,8 +93,8 @@ def test_collect_skills_basic(tmp_path: Path):
 
     # ce-plan has an argument-hint, ce-work doesn't
     by_name = {s[0]: s for s in skills}
-    assert by_name["ce-plan"][2] == "[args]"
-    assert by_name["ce-work"][2] is None
+    assert by_name["ce-plan"][1] == "[args]"
+    assert by_name["ce-work"][1] is None
 
 
 def test_collect_skills_fails_on_missing_skills_dir(tmp_path: Path):
