@@ -1,5 +1,5 @@
 ---
-description: "Capture a visual demo reel (GIF, terminal recording, screenshots) for PR descriptions."
+description: "ce-demo-reel"
 argument-hint: "[what to capture, e.g. 'the new settings page' or 'CLI output of the migrate command']"
 ---
 

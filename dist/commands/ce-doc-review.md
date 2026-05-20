@@ -1,5 +1,5 @@
 ---
-description: "Review requirements or plan documents using parallel persona agents that surface role-specific issues."
+description: "ce-doc-review"
 argument-hint: "[mode:headless] [path/to/document.md]"
 ---
 

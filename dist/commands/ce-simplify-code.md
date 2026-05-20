@@ -1,5 +1,5 @@
 ---
-description: "Simplify and refine recently changed code for clarity, reuse, quality, and efficiency while preserving behavior."
+description: "ce-simplify-code"
 argument-hint: "[blank to simplify current branch changes, or describe what to simplify]"
 ---
 

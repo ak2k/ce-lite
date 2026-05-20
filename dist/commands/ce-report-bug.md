@@ -1,5 +1,5 @@
 ---
-description: "Report a bug in the compound-engineering plugin"
+description: "ce-report-bug"
 argument-hint: "[optional: brief description of the bug]"
 ---
 

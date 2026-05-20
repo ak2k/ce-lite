@@ -1,5 +1,5 @@
 ---
-description: "Explore requirements and approaches through collaborative dialogue, then write a right-sized requirements document."
+description: "ce-brainstorm"
 argument-hint: "[feature idea or problem to explore]"
 ---
 

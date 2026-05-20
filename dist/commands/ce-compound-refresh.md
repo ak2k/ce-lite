@@ -1,5 +1,5 @@
 ---
-description: "Refresh stale learning and pattern docs under docs/solutions/ by reviewing them against the current codebase, then updating, consolidatin..."
+description: "ce-compound-refresh"
 argument-hint: "[optional: scope hint \u2014 directory, filename, module, or keyword] [mode:headless] "
 ---
 

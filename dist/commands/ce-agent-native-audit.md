@@ -1,5 +1,5 @@
 ---
-description: "Run comprehensive agent-native architecture review with scored principles"
+description: "ce-agent-native-audit"
 argument-hint: "[optional: specific principle to audit]"
 ---
 

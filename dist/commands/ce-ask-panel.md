@@ -1,5 +1,5 @@
 ---
-description: "Use to consult several persona specialists in parallel and merge their findings into one response."
+description: "ce-ask-panel"
 argument-hint: "<persona1>,<persona2>,... <task context>"
 ---
 
