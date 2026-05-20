@@ -96,7 +96,13 @@ jobs:
                   head: `${owner}:${run.head_branch}`,
                 });
                 for (const pr of prs) {
-                  candidates.push({ number: pr.number, headSha: pr.head.sha, phase: "merge" });
+                  // Use run.head_sha (the SHA the just-completed ci.yml ran
+                  // against), NOT pr.head.sha (current branch HEAD which may
+                  // have moved since the run started). Phase 2's moved-HEAD
+                  // guard then catches a force-push between dispatch and
+                  // merge with a clear log line instead of a misleading
+                  // "check not green yet."
+                  candidates.push({ number: pr.number, headSha: run.head_sha, phase: "merge" });
                 }
               }
             } else {
@@ -122,6 +128,13 @@ jobs:
             // auto-run. We dispatch it manually here. The resulting
             // workflow_dispatch run on ci.yml will trigger this same workflow
             // again via workflow_run, this time entering Phase 2 (merge).
+            //
+            // Note: `ref` for createWorkflowDispatch must be a branch or tag
+            // name, NOT a SHA (GitHub REST API constraint, not a choice). If
+            // the branch HEAD moves between this dispatch and ci.yml starting,
+            // ci.yml runs against the new HEAD. Phase 2's moved-HEAD guard
+            // (cand.headSha vs pr.head.sha) catches the race and skips the
+            // merge rather than merging the wrong SHA.
             for (const cand of candidates.filter(c => c.phase === "arm")) {
               const { data: pr } = await github.rest.pulls.get({
                 owner, repo, pull_number: cand.number,
@@ -156,16 +169,29 @@ jobs:
                 core.info(`#${cand.number}: mergeable=false; skipping.`);
                 continue;
               }
+              if (pr.mergeable === null) {
+                // GitHub hasn't finished computing mergeability yet (common
+                // shortly after open or push). Don't attempt merge — the
+                // next workflow_run will retry once GitHub has settled.
+                core.info(`#${cand.number}: mergeability still computing; will retry on next workflow_run.`);
+                continue;
+              }
 
               // Check that the named required check has a successful run on
               // the PR's head commit. Accept any successful GitHub Actions
               // run with the matching name (workflow_dispatch-triggered runs
               // count here — we own the gate, not branch-protection).
+              //
+              // Use check_name to filter server-side; sidesteps a pagination
+              // truncation bug where >100 check_runs on a SHA could hide the
+              // green one in a later page.
               const { data: cd } = await github.rest.checks.listForRef({
-                owner, repo, ref: pr.head.sha, per_page: 100,
+                owner, repo, ref: pr.head.sha,
+                check_name: REQUIRED_CHECK,
+                per_page: 100,
               });
               const matching = cd.check_runs.filter(
-                r => r.app?.slug === "github-actions" && r.name === REQUIRED_CHECK
+                r => r.app?.slug === "github-actions"
               );
               const greenRun = matching.find(r => r.conclusion === "success");
               if (!greenRun) {
