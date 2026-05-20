@@ -17,10 +17,11 @@
           # `nix fmt` runs every enabled formatter; `nix flake check` gates
           # via treefmt.config.build.check (added to `checks` below).
           # Excludes:
-          #   - dist/**             generated; provenance comes from the converter
-          #   - .claude/**          Claude Code worktree internals
-          #   - converter/resources/** ships verbatim into dist/bin/ (extensionless
-          #                            shebang scripts; ruff defaults to *.py)
+          #   - dist/**     generated; provenance comes from the converter
+          #   - .claude/**  Claude Code worktree internals
+          #   - converter/resources/ce-lite-persona  extensionless shebang
+          #                 script that ships verbatim into dist/bin/. Other
+          #                 .py files under converter/resources/ ARE linted.
           treefmt = treefmt-nix.lib.evalModule pkgs {
             projectRootFile = "flake.nix";
             programs.nixpkgs-fmt.enable = true;
@@ -29,7 +30,7 @@
             settings.global.excludes = [
               "dist/**"
               ".claude/**"
-              "converter/resources/**"
+              "converter/resources/ce-lite-persona"
               "*.lock"
             ];
           };
