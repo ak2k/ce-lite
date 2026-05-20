@@ -1,56 +1,199 @@
 name: auto-merge-publish-dist
 
-# Wraps the manual ritual for publish-dist auto-PRs:
+# Direct-API merge of publish-dist auto-PRs once `nix flake check` is green.
 #
-#   1. publish-dist opens a PR on `ce-lite/upstream-*` via
-#      peter-evans/create-pull-request@v8.
-#   2. The default GITHUB_TOKEN doesn't cascade to downstream workflows on
-#      that PR (GitHub anti-recursion safeguard), so ci.yml doesn't fire
-#      automatically. The PR sits with no checks until someone dispatches.
-#   3. This workflow listens for the PR being opened, dispatches ci.yml
-#      against its head branch, and enables --auto merge on the PR.
-#   4. Once ci.yml finishes green, branch protection's required check is
-#      satisfied and GitHub merges + deletes the branch automatically.
+# Modeled on ~/.config/nix/.github/workflows/automerge.yml — that workflow
+# direct-merges via `github.rest.pulls.merge()` after reading check_runs
+# from the API, bypassing GitHub's `--auto` facility entirely. This
+# sidesteps two gotchas in one stroke:
 #
-# Net: zero-touch upstream-bump merging. The maintainer ritual collapses
-# from "watch CI + manual merge" to nothing.
+#  - `peter-evans/create-pull-request@v8` with the default `GITHUB_TOKEN`
+#    doesn't fire `pull_request.opened` events (anti-recursion safeguard).
+#    `pull_request_target` and `workflow_run` BOTH fire regardless. Either
+#    is sufficient to drive the merge.
 #
-# Why a separate workflow file rather than wiring this into publish-dist
-# directly: publish-dist runs to completion BEFORE its peter-evans step
-# opens the PR, so we can't dispatch ci.yml from inside publish-dist
-# (the branch/PR don't exist yet during the workflow run).
+#  - `workflow_dispatch`-triggered runs of `ci.yml` create check_runs that
+#    GitHub's branch-protection layer doesn't credit. By direct-merging via
+#    the API and reading check_runs ourselves, we sidestep branch protection
+#    entirely — the workflow IS the gate.
+#
+# Per ce-lite's design (solo maintainer, no branch protection on main),
+# the workflow's check-runs verification is the only gate. Auto-PRs from
+# `publish-dist` get merged automatically; feature PRs aren't affected
+# (head_ref filter screens them out).
 
 on:
-  pull_request:
+  # Fires when ci.yml completes on the PR — only path that gives us a
+  # natural pull_request-event check_run on peter-evans-opened PRs is
+  # via workflow_dispatch (see Phase 1 below), so we wait for that to
+  # finish before deciding.
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
+
+  # Fires when the PR is opened by publish-dist. peter-evans's anti-
+  # recursion doesn't apply to pull_request_target. This is what kicks
+  # off Phase 1 (dispatch ci.yml against the branch).
+  pull_request_target:
     types: [opened, reopened]
-    branches:
-      - main
+    branches: [main]
+
+  # Manual escape hatch — useful when a PR ends up in an odd state.
+  workflow_dispatch:
+
+concurrency:
+  group: auto-merge-publish-dist
+  cancel-in-progress: false
 
 permissions:
+  checks: read
   contents: write
-  actions: write     # required to dispatch ci.yml via workflow_dispatch
+  actions: write
   pull-requests: write
 
 jobs:
-  arm:
-    # Match only the publish-dist auto-PRs by head-branch pattern. Feature
-    # PRs use any other branch name and are unaffected — they get CI
-    # automatically and the maintainer sets --auto manually if desired.
-    if: startsWith(github.event.pull_request.head.ref, 'ce-lite/upstream-')
+  arm-or-merge:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch ci.yml against the PR's head branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          echo "Dispatching ci.yml on branch: $BRANCH"
-          gh workflow run ci.yml -r "$BRANCH" -R "$GITHUB_REPOSITORY"
+      - name: Find candidate PRs + dispatch or merge
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const BRANCH_PREFIX = "ce-lite/upstream-";
+            const REQUIRED_CHECK = "nix flake check";
 
-      - name: Enable auto-merge on the PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: |
-          echo "Enabling --auto on: $PR_URL"
-          gh pr merge "$PR_URL" --auto --squash --delete-branch
+            // ---- Identify candidate PRs based on event source ----
+            //
+            // pull_request_target: one PR (the just-opened one).
+            // workflow_run: zero or more PRs the completed ci.yml run was for.
+            // workflow_dispatch: scan all open PRs matching the prefix.
+            let candidates = [];
+
+            if (context.eventName === "pull_request_target") {
+              const pr = context.payload.pull_request;
+              if (pr.head.ref.startsWith(BRANCH_PREFIX)) {
+                candidates.push({ number: pr.number, headSha: pr.head.sha, phase: "arm" });
+              }
+            } else if (context.eventName === "workflow_run") {
+              const run = context.payload.workflow_run;
+              if (run.conclusion !== "success") {
+                core.info(`ci.yml run ${run.id} did not succeed (${run.conclusion}); skipping.`);
+                return;
+              }
+              // run.pull_requests is populated for pull_request-triggered runs;
+              // workflow_dispatch runs leave it empty. Fall back to a branch
+              // lookup in that case.
+              if (run.pull_requests && run.pull_requests.length > 0) {
+                for (const pr of run.pull_requests) {
+                  candidates.push({ number: pr.number, headSha: run.head_sha, phase: "merge" });
+                }
+              } else if (run.head_branch && run.head_branch.startsWith(BRANCH_PREFIX)) {
+                const { data: prs } = await github.rest.pulls.list({
+                  owner, repo,
+                  state: "open",
+                  head: `${owner}:${run.head_branch}`,
+                });
+                for (const pr of prs) {
+                  candidates.push({ number: pr.number, headSha: pr.head.sha, phase: "merge" });
+                }
+              }
+            } else {
+              // workflow_dispatch: scan all open PRs that match the prefix
+              const prs = await github.paginate(github.rest.pulls.list, {
+                owner, repo, state: "open", base: "main", per_page: 100,
+              });
+              for (const pr of prs) {
+                if (pr.head.ref.startsWith(BRANCH_PREFIX)) {
+                  candidates.push({ number: pr.number, headSha: pr.head.sha, phase: "merge" });
+                }
+              }
+            }
+
+            if (candidates.length === 0) {
+              core.info("No candidate PRs.");
+              return;
+            }
+
+            // ---- Phase 1 (arm): dispatch ci.yml against the PR's head branch ----
+            //
+            // peter-evans-opened PRs don't fire pull_request → ci.yml doesn't
+            // auto-run. We dispatch it manually here. The resulting
+            // workflow_dispatch run on ci.yml will trigger this same workflow
+            // again via workflow_run, this time entering Phase 2 (merge).
+            for (const cand of candidates.filter(c => c.phase === "arm")) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: cand.number,
+              });
+              core.info(`#${cand.number}: dispatching ci.yml against ${pr.head.ref}`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner, repo,
+                workflow_id: "ci.yml",
+                ref: pr.head.ref,
+              });
+            }
+
+            // ---- Phase 2 (merge): check_runs green → direct-merge via API ----
+            for (const cand of candidates.filter(c => c.phase === "merge")) {
+              const { data: pr } = await github.rest.pulls.get({
+                owner, repo, pull_number: cand.number,
+              });
+
+              if (pr.state !== "open" || pr.draft) {
+                core.info(`#${cand.number}: not open / is draft; skipping.`);
+                continue;
+              }
+              if (!pr.head.ref.startsWith(BRANCH_PREFIX)) {
+                core.info(`#${cand.number}: head ref ${pr.head.ref} doesn't match prefix; skipping.`);
+                continue;
+              }
+              if (cand.headSha && pr.head.sha !== cand.headSha) {
+                core.info(`#${cand.number}: head SHA moved (event ${cand.headSha}, now ${pr.head.sha}); skipping.`);
+                continue;
+              }
+              if (pr.mergeable === false) {
+                core.info(`#${cand.number}: mergeable=false; skipping.`);
+                continue;
+              }
+
+              // Check that the named required check has a successful run on
+              // the PR's head commit. Accept any successful GitHub Actions
+              // run with the matching name (workflow_dispatch-triggered runs
+              // count here — we own the gate, not branch-protection).
+              const { data: cd } = await github.rest.checks.listForRef({
+                owner, repo, ref: pr.head.sha, per_page: 100,
+              });
+              const matching = cd.check_runs.filter(
+                r => r.app?.slug === "github-actions" && r.name === REQUIRED_CHECK
+              );
+              const greenRun = matching.find(r => r.conclusion === "success");
+              if (!greenRun) {
+                const states = matching.map(r => `${r.status}/${r.conclusion ?? "—"}`).join(", ") || "none";
+                core.info(`#${cand.number}: required check "${REQUIRED_CHECK}" not green yet (states: ${states}); waiting for next workflow_run.`);
+                continue;
+              }
+
+              try {
+                await github.rest.pulls.merge({
+                  owner, repo,
+                  pull_number: cand.number,
+                  sha: pr.head.sha,
+                  merge_method: "squash",
+                });
+                core.info(`#${cand.number}: merged via API.`);
+
+                // Best-effort: delete the source branch (matches the previous
+                // --delete-branch shape). Non-fatal if it fails.
+                try {
+                  await github.rest.git.deleteRef({
+                    owner, repo, ref: `heads/${pr.head.ref}`,
+                  });
+                  core.info(`#${cand.number}: deleted branch ${pr.head.ref}.`);
+                } catch (delErr) {
+                  core.warning(`#${cand.number}: branch delete failed: ${delErr.message}`);
+                }
+              } catch (mergeErr) {
+                core.warning(`#${cand.number}: merge failed: ${mergeErr.message}`);
+              }
+            }
