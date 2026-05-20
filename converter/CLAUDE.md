@@ -52,6 +52,22 @@ agent-name shapes. If `validate.py` reports "stray agent references not in
 manifest," `DISPATCH_PATTERNS.PERSONA_SUFFIXES` is missing the new suffix —
 extend it, regenerate, rerun.
 
+## Non-goal: patching upstream content
+
+`validate.py --upstream` enforces byte-equivalence between upstream agent
+bodies / SKILL.md bodies and their dist counterparts. This is deliberate
+architectural insurance — the converter is a **monotone projection**: only
+pure additions (preambles, wrappers, hooks, manifest) and pure removals
+(the `agents/` directory) are allowed.
+
+If upstream ships a bug in a `SKILL.md` body and ce-lite users feel it,
+**do not fix it here.** The round-trip check will fail, and the right
+call is to file the bug upstream at `EveryInc/compound-engineering-plugin`.
+Override mechanisms exist for frontmatter descriptions
+(`overrides/persona-descriptions.yaml`) and hook keywords
+(`overrides/persona-keywords.yaml`), but **not** for SKILL.md bodies —
+that's the line the property protects.
+
 ## Workflow shortcuts
 
 - `nix flake check` — format, actionlint, all unit tests (same as CI).

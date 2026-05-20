@@ -122,6 +122,13 @@ def cmd_prefix(root: Path, persona: dict, via: str) -> int:
     The task never touches argv here (and never touches Bash either when the
     caller does it via the Agent tool's structured parameter), so there is no
     shell-quoting risk for arbitrary task content.
+
+    Emits a one-line breadcrumb to stderr so the slash-command → SKILL.md →
+    resolver → Agent dispatch chain is visible in transcripts. Without this,
+    the double-hop is invisible — if the orchestrator pauses mid-flow, the
+    user sees "nothing happened" instead of a recorded dispatch attempt.
+    Stdout content is unchanged (the breadcrumb only goes to stderr, so it
+    doesn't leak into Agent.prompt).
     """
     if via not in DISPATCH_SOURCES:
         sys.exit(
@@ -132,11 +139,13 @@ def cmd_prefix(root: Path, persona: dict, via: str) -> int:
     if not path.is_file():
         sys.exit(f"ce-lite-persona: prompt file missing: {path}")
 
+    name = persona["name"]
+    sys.stderr.write(f"[ce-lite-persona] dispatching {name} via {via}\n")
+
     body = path.read_text(encoding="utf-8").rstrip("\n")
     tools = persona.get("tools") or []
     tools_str = ", ".join(tools) if tools else "any"
     model = persona.get("model") or "inherit"
-    name = persona["name"]
 
     preamble = (
         f"[ce-persona={name} via={via}]\n"

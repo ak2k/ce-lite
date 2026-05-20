@@ -5,8 +5,20 @@ SKILL.md at `dist/skills/ce-ask-<persona>/SKILL.md`. The wrapper restores
 addressability through Claude's skill-routing surface — Claude can
 spontaneously suggest `/ce-ask-security-sentinel` when reviewing
 security-sensitive code, without re-paying the persistent-agent
-registration cost (49 agents × ~1.2k tokens = ~58.8k baseline that the
-ce-lite v1 converter strips).
+registration cost.
+
+Measured upstream baseline (compound-engineering-v3.8.3, May 2026):
+49 agent files totalling ~308KB ≈ ~77k tokens of body text (avg ~1.6k
+tokens/agent), plus frontmatter (~67 tokens × 49 ≈ ~3.3k tokens). If
+Claude Code loads the full body into idle context for every registered
+agent — which the lived experience of pre-ce-lite session bloat and the
+community-cited "~1.2k tokens per agent registration" figure both
+suggest — ce-lite's deferral saves ~71k tokens (factoring in ~5.3k
+tokens of SKILL.md descriptions ce-lite ships idle). If Claude loads
+only frontmatter into the registration slot, the savings collapse to
+roughly break-even. The prior "~58.8k baseline" in this docstring was a
+midpoint estimate; treat any specific number as approximate until
+empirically A/B'd against a vanilla install.
 
 Dispatch lookup is handled by a single small Python shim at
 `dist/bin/ce-lite-persona` (this directory is on PATH because Claude Code
