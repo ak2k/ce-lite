@@ -1,6 +1,6 @@
 {
   "name": "ce-lite",
-  "version": "3.8.3-lite.2",
+  "version": "3.8.3-lite.3",
   "description": "Lightweight-delegation variant of compound-engineering. Agent registrations removed; specialist prompts loaded on demand from references/agent-prompts/. See https://github.com/ak2k/ce-lite.",
   "author": {
     "name": "Kieran Klaassen",
