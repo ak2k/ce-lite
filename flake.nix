@@ -4,23 +4,45 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    treefmt-nix.url = "github:numtide/treefmt-nix";
+    treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs@{ flake-parts, ... }:
+  outputs = inputs@{ flake-parts, treefmt-nix, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       perSystem = { pkgs, ... }:
         let
           pythonEnv = pkgs.python3.withPackages (ps: with ps; [ pyyaml pytest ]);
+          # `nix fmt` runs every enabled formatter; `nix flake check` gates
+          # via treefmt.config.build.check (added to `checks` below).
+          # Excludes:
+          #   - dist/**             generated; provenance comes from the converter
+          #   - .claude/**          Claude Code worktree internals
+          #   - converter/resources/** ships verbatim into dist/bin/ (extensionless
+          #                            shebang scripts; ruff defaults to *.py)
+          treefmt = treefmt-nix.lib.evalModule pkgs {
+            projectRootFile = "flake.nix";
+            programs.nixpkgs-fmt.enable = true;
+            programs.ruff-format.enable = true;
+            programs.ruff-check.enable = true;
+            settings.global.excludes = [
+              "dist/**"
+              ".claude/**"
+              "converter/resources/**"
+              "*.lock"
+            ];
+          };
         in
         {
-          formatter = pkgs.nixpkgs-fmt;
+          formatter = treefmt.config.build.wrapper;
 
           devShells.default = pkgs.mkShell {
             packages = [
               pythonEnv
               pkgs.actionlint
               pkgs.nixpkgs-fmt
+              pkgs.ruff
               pkgs.statix
             ];
           };
@@ -40,10 +62,7 @@
 
           # `nix flake check` runs these
           checks = {
-            format = pkgs.runCommand "check-format" { } ''
-              ${pkgs.nixpkgs-fmt}/bin/nixpkgs-fmt --check ${./.}
-              touch $out
-            '';
+            treefmt = treefmt.config.build.check inputs.self;
             actionlint = pkgs.runCommand "check-actions" { } ''
               ${pkgs.actionlint}/bin/actionlint \
                 ${./.github/workflows/upstream-watch.yml} \

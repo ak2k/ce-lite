@@ -20,26 +20,28 @@ from __future__ import annotations
 import re
 
 # Persona suffixes observed in CE v3.6.1 (49 agents). Sorted for diff stability.
-PERSONA_SUFFIXES: list[str] = sorted([
-    "agent",
-    "analyst",
-    "analyzer",
-    "detector",
-    "expert",
-    "guardian",
-    "historian",
-    "hunter",
-    "iterator",
-    "oracle",
-    "researcher",
-    "resolver",
-    "reviewer",
-    "sentinel",
-    "specialist",
-    "strategist",
-    "sync",
-    "writer",
-])
+PERSONA_SUFFIXES: list[str] = sorted(
+    [
+        "agent",
+        "analyst",
+        "analyzer",
+        "detector",
+        "expert",
+        "guardian",
+        "historian",
+        "hunter",
+        "iterator",
+        "oracle",
+        "researcher",
+        "resolver",
+        "reviewer",
+        "sentinel",
+        "specialist",
+        "strategist",
+        "sync",
+        "writer",
+    ]
+)
 
 # `ce-` + at least one mid-segment + `-` + persona-suffix, on a word boundary.
 # Examples that match: ce-security-reviewer, ce-data-integrity-guardian,

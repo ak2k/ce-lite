@@ -217,17 +217,38 @@ def lite_suffix_from_git(repo_root: Path, new_upstream_tag: str) -> str:
         return "-lite"
     try:
         last_bump = subprocess.check_output(
-            ["git", "-C", str(repo_root), "log", "-n", "1",
-             "--format=%H", "--", ".last-processed"],
-            text=True, stderr=subprocess.DEVNULL,
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "log",
+                "-n",
+                "1",
+                "--format=%H",
+                "--",
+                ".last-processed",
+            ],
+            text=True,
+            stderr=subprocess.DEVNULL,
         ).strip()
         if not last_bump:
             return "-lite"
-        count = int(subprocess.check_output(
-            ["git", "-C", str(repo_root), "rev-list", "--count",
-             f"{last_bump}..HEAD", "--", "converter/"],
-            text=True, stderr=subprocess.DEVNULL,
-        ).strip())
+        count = int(
+            subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    str(repo_root),
+                    "rev-list",
+                    "--count",
+                    f"{last_bump}..HEAD",
+                    "--",
+                    "converter/",
+                ],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        )
     except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
         return "-lite"
     return "-lite" if count == 0 else f"-lite.{count}"

@@ -98,19 +98,25 @@ def _classify_tool_use(tool_name: str, tool_input: dict) -> Verdict:
         skill_name = (tool_input.get("skill") or tool_input.get("name") or "").strip()
         if skill_name == "ce-ask":
             return Verdict(
-                layer=Layer.META_SKILL, persona=None,
-                raw_tool=tool_name, raw_input=tool_input,
+                layer=Layer.META_SKILL,
+                persona=None,
+                raw_tool=tool_name,
+                raw_input=tool_input,
             )
         if skill_name == "ce-ask-panel":
             return Verdict(
-                layer=Layer.PANEL, persona=None,
-                raw_tool=tool_name, raw_input=tool_input,
+                layer=Layer.PANEL,
+                persona=None,
+                raw_tool=tool_name,
+                raw_input=tool_input,
             )
         if skill_name.startswith("ce-ask-"):
-            persona = "ce-" + skill_name[len("ce-ask-"):]
+            persona = "ce-" + skill_name[len("ce-ask-") :]
             return Verdict(
-                layer=Layer.WRAPPER, persona=persona,
-                raw_tool=tool_name, raw_input=tool_input,
+                layer=Layer.WRAPPER,
+                persona=persona,
+                raw_tool=tool_name,
+                raw_input=tool_input,
             )
 
     # Some other tool fired (Read, Bash, Grep, Edit, etc.) — Claude is doing
@@ -119,8 +125,10 @@ def _classify_tool_use(tool_name: str, tool_input: dict) -> Verdict:
     # Note: this is NOT a terminal verdict; the caller should ignore NONE
     # results unless the stream ends without ever producing a layer match.
     return Verdict(
-        layer=Layer.NONE, persona=None,
-        raw_tool=tool_name, raw_input=tool_input,
+        layer=Layer.NONE,
+        persona=None,
+        raw_tool=tool_name,
+        raw_input=tool_input,
     )
 
 
@@ -137,6 +145,7 @@ def _extract_persona_arg(prompt: str) -> Optional[str]:
     global _PERSONA_ARG_RE
     if _PERSONA_ARG_RE is None:
         import re
+
         _PERSONA_ARG_RE = re.compile(
             r'persona\s*=\s*["\']?(ce-[a-z][a-z0-9-]*)["\']?',
             re.IGNORECASE,

@@ -32,7 +32,6 @@ import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from .stream_classifier import Layer, Verdict, classify_event
@@ -71,11 +70,15 @@ def run_claude_p(
         cases where we need to confirm NOTHING fires.
     """
     cmd = [
-        "claude", "-p", prompt,
-        "--output-format", "stream-json",
+        "claude",
+        "-p",
+        prompt,
+        "--output-format",
+        "stream-json",
         "--include-partial-messages",
         "--verbose",
-        "--model", model,
+        "--model",
+        model,
     ]
     env = {**os.environ}
     env.pop("CLAUDECODE", None)  # allow nesting subprocess inside Claude session
@@ -102,7 +105,9 @@ def run_claude_p(
     start = time.monotonic()
     timed_out = False
     error: Optional[str] = None
-    final_verdict = Verdict(layer=Layer.NONE, persona=None, raw_tool=None, raw_input=None)
+    final_verdict = Verdict(
+        layer=Layer.NONE, persona=None, raw_tool=None, raw_input=None
+    )
     intermediates: list[Layer] = []
     events_seen = 0
 
@@ -203,4 +208,5 @@ def run_claude_p(
 
 class _StopReading(Exception):
     """Internal sentinel to break out of the read loop on short-circuit."""
+
     pass

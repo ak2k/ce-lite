@@ -139,7 +139,8 @@ def check_hooks_dir(dist: Path) -> None:
         except (json.JSONDecodeError, KeyError):
             manifest_names = set()
         bad = [
-            r.get("persona") for r in rules
+            r.get("persona")
+            for r in rules
             if isinstance(r, dict)
             and r.get("persona")
             and r["persona"] not in manifest_names
@@ -172,21 +173,21 @@ def check_bin_dir(dist: Path) -> None:
     resolver = bin_dir / "ce-lite-persona"
     if not resolver.is_file():
         fail(
-            f"dist/bin/ exists but is missing ce-lite-persona resolver shim. "
-            f"generate_wrappers.py should have emitted it."
+            "dist/bin/ exists but is missing ce-lite-persona resolver shim. "
+            "generate_wrappers.py should have emitted it."
         )
     if not os.access(resolver, os.X_OK):
         fail(
-            f"dist/bin/ce-lite-persona is not executable. "
-            f"generate_wrappers.py should chmod 0o755 after writing it."
+            "dist/bin/ce-lite-persona is not executable. "
+            "generate_wrappers.py should chmod 0o755 after writing it."
         )
     text = resolver.read_text(encoding="utf-8", errors="replace")
     if not text.startswith("#!"):
-        fail(f"dist/bin/ce-lite-persona: missing shebang line")
+        fail("dist/bin/ce-lite-persona: missing shebang line")
     if "ce-lite-persona" not in text:
         fail(
-            f"dist/bin/ce-lite-persona: file does not self-identify "
-            f"(missing 'ce-lite-persona' string). Wrong file emitted?"
+            "dist/bin/ce-lite-persona: file does not self-identify "
+            "(missing 'ce-lite-persona' string). Wrong file emitted?"
         )
 
 
@@ -217,7 +218,9 @@ def check_manifest(dist: Path) -> set[str]:
     except json.JSONDecodeError as exc:
         fail(f"{manifest_path}: invalid JSON: {exc}")
     if data.get("schema_version") != 1:
-        fail(f"{manifest_path}: unexpected schema_version {data.get('schema_version')!r}")
+        fail(
+            f"{manifest_path}: unexpected schema_version {data.get('schema_version')!r}"
+        )
 
     agents = data.get("agents") or []
     if not agents:
@@ -238,7 +241,9 @@ def check_manifest(dist: Path) -> set[str]:
             fail(f"{manifest_path}: agent {name!r} missing 'prompt_path'")
         prompt_file = dist / prompt_path
         if not prompt_file.is_file():
-            fail(f"{manifest_path}: agent {name!r} prompt_path does not exist: {prompt_file}")
+            fail(
+                f"{manifest_path}: agent {name!r} prompt_path does not exist: {prompt_file}"
+            )
 
         size = prompt_file.stat().st_size
         if size < MIN_PROMPT_BYTES:
@@ -254,9 +259,13 @@ def check_manifest(dist: Path) -> set[str]:
         only_in_manifest = names_in_manifest - actual_names
         msg = []
         if only_in_files:
-            msg.append(f"orphan files (in dir, not in manifest): {sorted(only_in_files)}")
+            msg.append(
+                f"orphan files (in dir, not in manifest): {sorted(only_in_files)}"
+            )
         if only_in_manifest:
-            msg.append(f"orphan manifest entries (in manifest, no file): {sorted(only_in_manifest)}")
+            msg.append(
+                f"orphan manifest entries (in manifest, no file): {sorted(only_in_manifest)}"
+            )
         fail(f"{manifest_path}: manifest/file mismatch: {'; '.join(msg)}")
 
     return names_in_manifest
@@ -305,7 +314,7 @@ def check_skills(dist: Path, manifest_names: set[str]) -> None:
         # carries the skill's own name and metadata, not dispatch language.
         # Agent references that matter live in the body.
         fm_line_count = fm_match.group(0).count("\n")
-        body_text = text[fm_match.end():]
+        body_text = text[fm_match.end() :]
 
         # Strays: agent-shaped tokens not in manifest or in any sibling skill's name
         strays_found: dict[str, int] = {}
@@ -316,7 +325,9 @@ def check_skills(dist: Path, manifest_names: set[str]) -> None:
                 if name not in allowed_names:
                     strays_found.setdefault(name, line_num)
         if strays_found:
-            details = "; ".join(f"{name} (line {ln})" for name, ln in strays_found.items())
+            details = "; ".join(
+                f"{name} (line {ln})" for name, ln in strays_found.items()
+            )
             fail(
                 f"{skill_md.relative_to(dist)}: stray agent references not in manifest: "
                 f"{details}\n  Either upstream introduced a new persona-suffix shape "
@@ -389,7 +400,9 @@ def check_commands(dist: Path) -> None:
         if only_in_skills:
             msg.append(f"skills without command wrappers: {sorted(only_in_skills)}")
         if only_in_commands:
-            msg.append(f"command wrappers with no matching skill: {sorted(only_in_commands)}")
+            msg.append(
+                f"command wrappers with no matching skill: {sorted(only_in_commands)}"
+            )
         fail(f"dist/commands/ ↔ dist/skills/ mismatch: {'; '.join(msg)}")
 
     # Sanity-check each command file has the expected frontmatter shape.
@@ -502,7 +515,9 @@ def check_metadata_files_unchanged(dist: Path, upstream: Path) -> None:
             fail(f"round-trip: dist missing {dist_entry} (upstream had it)")
         if entry.is_file():
             if entry.read_bytes() != dist_entry.read_bytes():
-                fail(f"round-trip: {entry.name} differs from upstream — extract.py mangled it?")
+                fail(
+                    f"round-trip: {entry.name} differs from upstream — extract.py mangled it?"
+                )
 
 
 def main(dist_dir: str, upstream_dir: str | None = None) -> int:
@@ -515,24 +530,39 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
         check_hooks_dir(dist)
         check_bin_dir(dist)
         plugin_data = check_plugin_json(dist)
-        print(f"  plugin: name={plugin_data['name']} version={plugin_data['version']}", file=sys.stderr)
+        print(
+            f"  plugin: name={plugin_data['name']} version={plugin_data['version']}",
+            file=sys.stderr,
+        )
 
         manifest_names = check_manifest(dist)
-        print(f"  manifest: {len(manifest_names)} agents, all prompt files present", file=sys.stderr)
+        print(
+            f"  manifest: {len(manifest_names)} agents, all prompt files present",
+            file=sys.stderr,
+        )
 
         check_skills(dist, manifest_names)
-        print(f"  skills: all SKILL.md files structurally valid; orchestrators have preambles", file=sys.stderr)
+        print(
+            "  skills: all SKILL.md files structurally valid; orchestrators have preambles",
+            file=sys.stderr,
+        )
 
         check_commands(dist)
-        print(f"  commands: every skill has a matching slash-command wrapper", file=sys.stderr)
+        print(
+            "  commands: every skill has a matching slash-command wrapper",
+            file=sys.stderr,
+        )
 
         if upstream_dir:
             upstream = Path(upstream_dir).resolve()
-            print(f"  round-trip: comparing dist against upstream={upstream}", file=sys.stderr)
+            print(
+                f"  round-trip: comparing dist against upstream={upstream}",
+                file=sys.stderr,
+            )
             check_round_trip(dist, upstream, manifest_names)
-            print(f"    agent bodies + skill bodies byte-equivalent", file=sys.stderr)
+            print("    agent bodies + skill bodies byte-equivalent", file=sys.stderr)
             check_metadata_files_unchanged(dist, upstream)
-            print(f"    metadata files unchanged from upstream", file=sys.stderr)
+            print("    metadata files unchanged from upstream", file=sys.stderr)
 
     except ValidationError as exc:
         print(f"\n*** VALIDATION FAILED ***\n{exc}", file=sys.stderr)
