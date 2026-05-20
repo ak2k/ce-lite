@@ -60,8 +60,12 @@
                   ];
                 };
               in
-              pkgs.runCommand "check-tests" { } ''
+              # `git` is required at runtime for `extract.lite_suffix_from_git`
+                # tests, which spin up real ephemeral git repos to verify the
+                # suffix-computation behaviour.
+              pkgs.runCommand "check-tests" { buildInputs = [ pkgs.git ]; } ''
                 export PYTHONDONTWRITEBYTECODE=1
+                export HOME=$TMPDIR
                 cd ${src}
                 ${pythonEnv}/bin/pytest tests/ -v --no-header -p no:cacheprovider
                 touch $out
