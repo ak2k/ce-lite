@@ -33,17 +33,10 @@ Persona names are the **canonical** names from the plugin's persona manifest
 3. For each validated persona, dispatch in parallel via `Agent` with
    `subagent_type: "general-purpose"` and
    `description: "<persona>: <task summary>"` (meaningful trace label).
-   The prompt is `ce-lite-persona <persona> --body` output followed by:
-
-   ```
-   [ce-persona=<persona> via=ce-ask-panel]
-
-   You are operating as the <persona> specialist. Honour the manifest's
-   tools/model constraints for this role; if a task pulls you toward tools
-   outside that set, stop and explain why your role requires it.
-   ```
-
-   Then a blank line and the user-supplied task context.
+   The prompt is the output of
+   `ce-lite-persona <persona> --prefix --via ce-ask-panel`, a blank line,
+   then the user-supplied task context. The task is concatenated into the
+   Agent.prompt parameter directly — not passed to the resolver.
 
 4. Wait for all dispatches to complete. Merge into one response, grouping
    by persona with section headers (`## <persona> findings`). Preserve each

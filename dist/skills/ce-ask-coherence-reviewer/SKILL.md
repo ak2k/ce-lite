@@ -7,31 +7,17 @@ description: "Reviews planning documents for internal consistency -- contradicti
 
 Dispatch the **ce-coherence-reviewer** specialist as a sub-agent.
 
-## Steps
+1. Run `ce-lite-persona ce-coherence-reviewer --prefix` via Bash. Output is the
+   full prompt prefix — persona body, `[ce-persona=ce-coherence-reviewer via=ce-ask-direct]`
+   trace tag, and the tool-restriction self-policing preamble derived from the
+   manifest — ready to concatenate with the task. Non-zero exit means the
+   resolver hit an error (unknown persona, missing prompt file, partial
+   install); surface stderr and stop without falling back.
 
-1. Run `ce-lite-persona ce-coherence-reviewer --body` via Bash. The resolver is on
-   PATH (this plugin's `bin/` is exported by Claude Code) and prints the
-   persona's full role prompt to stdout. On non-zero exit, the resolver's
-   stderr explains the cause (unknown persona, missing prompt file, plugin
-   not installed) — surface it and stop. Do not silently fall back to a
-   different persona.
-
-2. Spawn an `Agent` with `subagent_type: "general-purpose"` and
+2. Spawn `Agent` with `subagent_type: "general-purpose"` and
    `description: "ce-coherence-reviewer: <one-line task summary>"` so traces stay
-   readable. The prompt is the resolver output followed by this preamble
-   and then the user-supplied task ($ARGUMENTS):
+   readable. `prompt` is the resolver's stdout from step 1, a blank line,
+   then `$ARGUMENTS`. The task is never passed through Bash on the resolver
+   call — concatenate it into the Agent.prompt parameter directly.
 
-   ```
-   [ce-persona=ce-coherence-reviewer via=ce-ask-direct]
-
-   You are operating as the ce-coherence-reviewer specialist. Manifest declares
-   this role uses tools=[Read, Grep, Glob, Bash] and model=haiku. Honour
-   those constraints: if a task pulls you toward tools outside that set,
-   stop and explain why your role requires it — don't silently broaden
-   scope.
-   ```
-
-For a parallel multi-persona dispatch, see `/ce-ask-panel`.
-
-Trace tag `[ce-persona=ce-coherence-reviewer via=ce-ask-direct]` is inline debug
-metadata; `grep` transcripts when investigating routing questions.
+For parallel multi-persona dispatch, see `/ce-ask-panel`.

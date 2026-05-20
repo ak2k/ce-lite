@@ -198,7 +198,6 @@ def passA_description(manifest_desc: str) -> str:
 
 
 def render_wrapper(persona: Persona, description: str) -> str:
-    tools_str = ", ".join(persona.tools) if persona.tools else "any"
     return f"""\
 ---
 name: {wrapper_name(persona.name)}
@@ -209,34 +208,20 @@ description: {json.dumps(description)}
 
 Dispatch the **{persona.name}** specialist as a sub-agent.
 
-## Steps
+1. Run `ce-lite-persona {persona.name} --prefix` via Bash. Output is the
+   full prompt prefix — persona body, `[ce-persona={persona.name} via=ce-ask-direct]`
+   trace tag, and the tool-restriction self-policing preamble derived from the
+   manifest — ready to concatenate with the task. Non-zero exit means the
+   resolver hit an error (unknown persona, missing prompt file, partial
+   install); surface stderr and stop without falling back.
 
-1. Run `ce-lite-persona {persona.name} --body` via Bash. The resolver is on
-   PATH (this plugin's `bin/` is exported by Claude Code) and prints the
-   persona's full role prompt to stdout. On non-zero exit, the resolver's
-   stderr explains the cause (unknown persona, missing prompt file, plugin
-   not installed) — surface it and stop. Do not silently fall back to a
-   different persona.
-
-2. Spawn an `Agent` with `subagent_type: "general-purpose"` and
+2. Spawn `Agent` with `subagent_type: "general-purpose"` and
    `description: "{persona.name}: <one-line task summary>"` so traces stay
-   readable. The prompt is the resolver output followed by this preamble
-   and then the user-supplied task ($ARGUMENTS):
+   readable. `prompt` is the resolver's stdout from step 1, a blank line,
+   then `$ARGUMENTS`. The task is never passed through Bash on the resolver
+   call — concatenate it into the Agent.prompt parameter directly.
 
-   ```
-   [ce-persona={persona.name} via=ce-ask-direct]
-
-   You are operating as the {persona.name} specialist. Manifest declares
-   this role uses tools=[{tools_str}] and model={persona.model}. Honour
-   those constraints: if a task pulls you toward tools outside that set,
-   stop and explain why your role requires it — don't silently broaden
-   scope.
-   ```
-
-For a parallel multi-persona dispatch, see `/ce-ask-panel`.
-
-Trace tag `[ce-persona={persona.name} via=ce-ask-direct]` is inline debug
-metadata; `grep` transcripts when investigating routing questions.
+For parallel multi-persona dispatch, see `/ce-ask-panel`.
 """
 
 
@@ -302,17 +287,10 @@ Persona names are the **canonical** names from the plugin's persona manifest
 3. For each validated persona, dispatch in parallel via `Agent` with
    `subagent_type: "general-purpose"` and
    `description: "<persona>: <task summary>"` (meaningful trace label).
-   The prompt is `ce-lite-persona <persona> --body` output followed by:
-
-   ```
-   [ce-persona=<persona> via=ce-ask-panel]
-
-   You are operating as the <persona> specialist. Honour the manifest's
-   tools/model constraints for this role; if a task pulls you toward tools
-   outside that set, stop and explain why your role requires it.
-   ```
-
-   Then a blank line and the user-supplied task context.
+   The prompt is the output of
+   `ce-lite-persona <persona> --prefix --via ce-ask-panel`, a blank line,
+   then the user-supplied task context. The task is concatenated into the
+   Agent.prompt parameter directly — not passed to the resolver.
 
 4. Wait for all dispatches to complete. Merge into one response, grouping
    by persona with section headers (`## <persona> findings`). Preserve each
@@ -503,17 +481,10 @@ is the persona name; everything after is the task context.
 3. **Persona name + task** — dispatch via `Agent` with
    `subagent_type: "general-purpose"` and
    `description: "<persona>: <task summary>"` (meaningful trace label).
-   The prompt is `ce-lite-persona <persona> --body` output followed by:
-
-   ```
-   [ce-persona=<persona> via=ce-ask-meta]
-
-   You are operating as the <persona> specialist. Honour the manifest's
-   tools/model constraints; if a task pulls you toward tools outside that
-   set, stop and explain why your role requires it.
-   ```
-
-   Then a blank line and the user task.
+   The prompt is the output of
+   `ce-lite-persona <persona> --prefix --via ce-ask-meta`, a blank line,
+   then the user task. The task is concatenated into the Agent.prompt
+   parameter directly — not passed to the resolver.
 
 ## Notes
 
@@ -557,7 +528,13 @@ Don't edit; regenerate from the converter.
 The plugin's `bin/` is on PATH because Claude Code exports it for installed
 plugins, so dispatch sites in skill bodies invoke this directly:
 
-    ce-lite-persona ce-security-sentinel --body   # cat the prompt
+    ce-lite-persona ce-security-sentinel --prefix [--via ce-code-review]
+                                                  # full prompt prefix:
+                                                  # body + trace tag +
+                                                  # tool-restriction preamble.
+                                                  # Concatenate with the task
+                                                  # to form Agent.prompt.
+    ce-lite-persona ce-security-sentinel --body   # bare prompt body only
     ce-lite-persona ce-security-sentinel --path   # absolute path
     ce-lite-persona --list                        # tab-separated catalog
     ce-lite-persona --diagnose                    # install health check
@@ -568,6 +545,12 @@ Plugin-root resolution order:
 
 Persona names accept the canonical form (`ce-security-sentinel`) or the
 bare form (`security-sentinel`).
+
+The task content NEVER passes through argv on a --prefix call — only the
+persona name and dispatch source do. Arbitrary user task content (quotes,
+backticks, dollar signs, newlines) is safe because the caller concatenates
+the resolver's stdout with the task inside the Agent.prompt JSON parameter,
+which bash never sees.
 """
 from __future__ import annotations
 
@@ -640,6 +623,56 @@ def cmd_body(root: Path, persona: dict) -> int:
     return 0
 
 
+# Recognised dispatch sources for --via. Anything outside this set is rejected
+# (typo defence). Keep this list in sync with the wrapper templates that pass
+# --via and the generated meta-skill/panel/orchestrator preambles.
+DISPATCH_SOURCES = {
+    "ce-ask-direct",   # /ce-ask-<persona> wrapper
+    "ce-ask-meta",     # /ce-ask <persona> ...
+    "ce-ask-panel",    # /ce-ask-panel a,b,c ...
+    "ce-code-review",
+    "ce-doc-review",
+    "ce-resolve-pr-feedback",
+}
+
+
+def cmd_prefix(root: Path, persona: dict, via: str) -> int:
+    """Emit the full dispatch prompt prefix: body + trace tag + tool restriction.
+
+    Concatenate this with the user task to form the Agent.prompt parameter.
+    The task never touches argv here (and never touches Bash either when the
+    caller does it via the Agent tool's structured parameter), so there is no
+    shell-quoting risk for arbitrary task content.
+    """
+    if via not in DISPATCH_SOURCES:
+        sys.exit(
+            f"ce-lite-persona: unknown --via dispatch source: '{via}'. "
+            f"Known sources: {', '.join(sorted(DISPATCH_SOURCES))}"
+        )
+    path = root / persona["prompt_path"]
+    if not path.is_file():
+        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
+
+    body = path.read_text(encoding="utf-8").rstrip("\\n")
+    tools = persona.get("tools") or []
+    tools_str = ", ".join(tools) if tools else "any"
+    model = persona.get("model") or "inherit"
+    name = persona["name"]
+
+    preamble = (
+        f"[ce-persona={name} via={via}]\\n"
+        f"\\n"
+        f"You are operating as the {name} specialist. Manifest declares this "
+        f"role uses tools=[{tools_str}] and model={model}. Honour those "
+        f"constraints: if a task pulls you toward tools outside that set, "
+        f"stop and explain why your role requires it — don't silently broaden "
+        f"scope.\\n"
+    )
+
+    sys.stdout.write(body + "\\n\\n" + preamble)
+    return 0
+
+
 def cmd_list(manifest: dict) -> int:
     for agent in manifest.get("agents", []):
         desc = (agent.get("description", "") or "").splitlines()
@@ -690,12 +723,27 @@ def main(argv: list[str]) -> int:
         help="cat the prompt file contents to stdout (default)",
     )
     group.add_argument(
+        "--prefix", action="store_true",
+        help=(
+            "emit the full dispatch prompt prefix (body + trace tag + "
+            "tool-restriction preamble), ready to concatenate with the task. "
+            "Use with --via to record the dispatch source in the trace tag."
+        ),
+    )
+    group.add_argument(
         "--list", action="store_true", dest="list_all",
         help="list all available personas (name<TAB>description)",
     )
     group.add_argument(
         "--diagnose", action="store_true",
         help="print plugin root, manifest path, and per-persona prompt presence",
+    )
+    parser.add_argument(
+        "--via", default="ce-ask-direct",
+        help=(
+            "dispatch source recorded in the [ce-persona=NAME via=SOURCE] "
+            "trace tag emitted by --prefix. Defaults to ce-ask-direct."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -713,6 +761,8 @@ def main(argv: list[str]) -> int:
     persona = find_persona(manifest, args.persona)
     if args.path:
         return cmd_path(root, persona)
+    if args.prefix:
+        return cmd_prefix(root, persona, args.via)
     return cmd_body(root, persona)
 
 

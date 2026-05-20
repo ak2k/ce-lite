@@ -10,28 +10,22 @@ argument-hint: "[feature idea or problem to explore]"
 > **ce-lite dispatch protocol.** Persona names referenced below
 > (`ce-security-reviewer`, `ce-correctness-reviewer`,
 > `ce-learnings-researcher`, …) are NOT registered subagent types in this
-> variant — they're data files at `references/agent-prompts/<name>.md`. To
-> dispatch one:
+> variant — they're data files. To dispatch one:
 >
-> 1. Run `ce-lite-persona <persona-name> --body` via Bash. The resolver is
->    on PATH (this plugin's `bin/` is exported by Claude Code) and prints
->    the persona's full role prompt to stdout. Non-zero exit means an
->    unknown persona or partial install — the resolver's stderr explains;
->    surface it and stop. Do not silently fall back to a different persona.
+> 1. Run `ce-lite-persona <persona-name> --prefix --via ce-code-review`
+>    via Bash (substitute the current orchestrator name for `ce-code-review`
+>    if different). The resolver is on PATH (this plugin's `bin/` is
+>    exported by Claude Code) and emits the full prompt prefix: persona
+>    body, trace tag, and tool-restriction self-policing preamble. Non-zero
+>    exit means the resolver hit an error; surface stderr and stop.
 >
-> 2. Spawn an `Agent` (or your harness's equivalent) with `subagent_type:
->    "general-purpose"` and a meaningful
+> 2. Spawn `Agent` with `subagent_type: "general-purpose"` and a meaningful
 >    `description: "<persona-name>: <one-line task summary>"` so traces
->    stay readable. The prompt is the resolver output + this skill's
->    existing context bundle (intent, diff, base, file list, etc.) +
->    output schema, in that order.
+>    stay readable. The Agent's `prompt` parameter is the resolver output
+>    from step 1, a blank line, then this skill's existing context bundle
+>    (intent, diff, base, file list, etc.) and output schema.
 >
-> 3. Apply any dispatch-time options the skill specifies for the original
->    named agent (model override, parallel-scheduler limits, etc.). Tool
->    constraints are advisory in this variant — pass them inline in the
->    dispatched prompt.
->
-> 4. **Do not** call `Agent({subagent_type: "ce-<name>"})` — those
+> 3. **Do not** call `Agent({subagent_type: "ce-<name>"})` — those
 >    registrations don't exist in this variant.
 >
 > Persona names elsewhere in this skill (descriptive prose, tables, status
