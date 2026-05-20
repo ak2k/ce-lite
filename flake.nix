@@ -67,7 +67,9 @@
             actionlint = pkgs.runCommand "check-actions" { } ''
               ${pkgs.actionlint}/bin/actionlint \
                 ${./.github/workflows/upstream-watch.yml} \
-                ${./.github/workflows/publish-dist.yml}
+                ${./.github/workflows/publish-dist.yml} \
+                ${./.github/workflows/ci.yml} \
+                ${./.github/workflows/auto-merge-publish-dist.yml}
               touch $out
             '';
             tests =

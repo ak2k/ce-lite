@@ -1,0 +1,56 @@
+name: auto-merge-publish-dist
+
+# Wraps the manual ritual for publish-dist auto-PRs:
+#
+#   1. publish-dist opens a PR on `ce-lite/upstream-*` via
+#      peter-evans/create-pull-request@v8.
+#   2. The default GITHUB_TOKEN doesn't cascade to downstream workflows on
+#      that PR (GitHub anti-recursion safeguard), so ci.yml doesn't fire
+#      automatically. The PR sits with no checks until someone dispatches.
+#   3. This workflow listens for the PR being opened, dispatches ci.yml
+#      against its head branch, and enables --auto merge on the PR.
+#   4. Once ci.yml finishes green, branch protection's required check is
+#      satisfied and GitHub merges + deletes the branch automatically.
+#
+# Net: zero-touch upstream-bump merging. The maintainer ritual collapses
+# from "watch CI + manual merge" to nothing.
+#
+# Why a separate workflow file rather than wiring this into publish-dist
+# directly: publish-dist runs to completion BEFORE its peter-evans step
+# opens the PR, so we can't dispatch ci.yml from inside publish-dist
+# (the branch/PR don't exist yet during the workflow run).
+
+on:
+  pull_request:
+    types: [opened, reopened]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: write     # required to dispatch ci.yml via workflow_dispatch
+  pull-requests: write
+
+jobs:
+  arm:
+    # Match only the publish-dist auto-PRs by head-branch pattern. Feature
+    # PRs use any other branch name and are unaffected — they get CI
+    # automatically and the maintainer sets --auto manually if desired.
+    if: startsWith(github.event.pull_request.head.ref, 'ce-lite/upstream-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch ci.yml against the PR's head branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          echo "Dispatching ci.yml on branch: $BRANCH"
+          gh workflow run ci.yml -r "$BRANCH" -R "$GITHUB_REPOSITORY"
+
+      - name: Enable auto-merge on the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "Enabling --auto on: $PR_URL"
+          gh pr merge "$PR_URL" --auto --squash --delete-branch
