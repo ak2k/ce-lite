@@ -2,7 +2,7 @@
 
 Lightweight-delegation variant of [compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin).
 
-Drops the persistent agent registrations (~71k tokens of idle context savings, conditional on Claude Code loading agent bodies into the registration slot — see [the docstring](converter/generate_wrappers.py) for the measurement caveat) and dispatches every specialist via a single resolver shim instead. Specialist prompts move to `references/agent-prompts/`; the resolver (`bin/ce-lite-persona`) loads them on demand. Same coverage as upstream CE, near-zero idle cost, and a `UserPromptSubmit` hook restores proactive specialist invocation across all 49 personas.
+Drops the persistent agent registrations (**measured: ~99.9k tokens of idle context, gone**) and dispatches every specialist via a single resolver shim instead. Specialist prompts move to `references/agent-prompts/`; the resolver (`bin/ce-lite-persona`) loads them on demand. Same coverage as upstream CE, near-zero idle cost, and a `UserPromptSubmit` hook restores proactive specialist invocation across all 49 personas.
 
 ## Install
 
@@ -11,13 +11,24 @@ Drops the persistent agent registrations (~71k tokens of idle context savings, c
 /plugins install ce-lite@ce-lite
 ```
 
-During trial, slash commands are namespaced under `/ce-lite:*` so the original `compound-engineering` plugin can be installed alongside for direct comparison. The current shipping version is `compound-engineering-v3.8.3-lite.3`; daily `upstream-watch.yml` auto-bumps as EveryInc releases.
+During trial, slash commands are namespaced under `/ce-lite:*` so the original `compound-engineering` plugin can be installed alongside for direct comparison. Daily `upstream-watch.yml` auto-bumps the plugin as EveryInc tags new releases.
 
 ## Trade-offs vs. upstream CE
 
-| | Upstream CE | ce-lite |
+Measured against an interactive Claude Code session (Opus 4.7 1M-context, two isolated `CLAUDE_CONFIG_DIR`s, identical state except the installed plugin):
+
+| Context slot | Upstream CE | ce-lite | Δ |
+|---|---:|---:|---:|
+| **Total** | **192.5k** | **87.3k** | **−105.2k** |
+| Custom agents | 99.9k (49 subagent registrations) | 0 (no registrations) | −99.9k |
+| System tools | 35.5k | 22.3k | −13.2k |
+| Skills | 4.6k | 12.5k | +7.9k |
+| System prompt / MCP / memory / messages | 52.5k | 52.5k | 0 |
+
+The ~99.9k of custom-agents context — Claude Code loads each registered subagent's full body for proactive selection — is the dominant savings. ce-lite trades a +7.9k skills bump (88 SKILL.md descriptions vs upstream's 29) for that.
+
+| Behavior | Upstream CE | ce-lite |
 |---|---|---|
-| Idle context cost | ~77k tokens of agent bodies (49 registrations, if Claude Code loads bodies into the registration slot) | ~5,250 tokens (88 SKILL.md `description:` fields only); persona bodies lazy-loaded on dispatch |
 | Specialist coverage | 49 personas | 49 personas (prompts moved to `references/agent-prompts/`, dispatched via `bin/ce-lite-persona`) |
 | Proactive specialist invocation | ✅ Any conversation can pull `security-sentinel` via registered subagent | ✅ `UserPromptSubmit` hook keyword-matches every prompt against all 49 personas and injects suggestions (~70-84% activation per cited research, vs ~20% baseline for description-only routing) |
 | Tool-restriction enforcement | Enforced by harness on registered subagent | Advisory only — dispatch via `general-purpose` subagent. See [caveat below](#caveat-tool-restrictions-are-advisory). |
