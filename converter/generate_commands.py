@@ -37,38 +37,20 @@ COMMAND_GENERATED_MARKER = (
     "Regenerate via converter/generate_commands.py. -->"
 )
 
-# Hard cap on description length for slash-command autocomplete display.
-# Skill descriptions are often multi-sentence trigger blurbs; the autocomplete
-# row truncates anyway, but a shorter explicit cap keeps the rendered list
-# scannable and avoids passing huge strings through the harness.
-MAX_DESCRIPTION_LEN = 140
+# Command-wrapper `description:` is the skill name itself (not the SKILL.md
+# description blurb). Rationale: Claude Code counts each plugin-namespaced
+# command (`/ce-lite:<name>`) as a separate skill entry in /context, with
+# its own description-derived token cost — independent of the SKILL.md
+# `description:` that drives the bare `/<name>` entry. Carrying the full
+# blurb in both places double-charged ~6k tokens of idle context for ce-lite.
+# The skill name alone is just enough to satisfy validate.py's non-empty
+# check while collapsing the duplicate to ~5 tokens per command.
 
 
-def shorten_description(description: str) -> str:
-    """Reduce a skill description to a single autocomplete-friendly line.
-
-    Strategy: take the first sentence (up to first '. ' boundary), then hard-
-    truncate to MAX_DESCRIPTION_LEN with an ellipsis if still too long. Skill
-    descriptions are often paragraphs of trigger phrasing — the command file
-    only needs the action-oriented headline.
-    """
-    text = " ".join(description.split())  # collapse internal whitespace
-    if not text:
-        return ""
-    # First-sentence split. Look for ". " (period + space), not bare "." which
-    # would split on abbreviations like "etc." or version numbers.
-    period_idx = text.find(". ")
-    if 0 < period_idx < MAX_DESCRIPTION_LEN:
-        text = text[: period_idx + 1]
-    if len(text) > MAX_DESCRIPTION_LEN:
-        text = text[: MAX_DESCRIPTION_LEN - 3].rstrip() + "..."
-    return text
-
-
-def render_command(skill_name: str, description: str, argument_hint: str | None) -> str:
+def render_command(skill_name: str, argument_hint: str | None) -> str:
     """Render the command-file body for one skill."""
     fm_lines = [
-        f"description: {json.dumps(description)}",
+        f"description: {json.dumps(skill_name)}",
     ]
     if argument_hint:
         fm_lines.append(f"argument-hint: {json.dumps(argument_hint)}")
@@ -87,8 +69,8 @@ Arguments: $ARGUMENTS
 """
 
 
-def collect_skills(dist: Path) -> list[tuple[str, str, str | None]]:
-    """Return [(skill_name, description, argument_hint?), ...] for every SKILL.md.
+def collect_skills(dist: Path) -> list[tuple[str, str | None]]:
+    """Return [(skill_name, argument_hint?), ...] for every SKILL.md.
 
     Fails loud if any SKILL.md has malformed frontmatter or no `name:` — the
     same skills will be expected to exist by validate.py, so silent skips
@@ -98,7 +80,7 @@ def collect_skills(dist: Path) -> list[tuple[str, str, str | None]]:
     if not skills_dir.is_dir():
         raise FileNotFoundError(f"missing {skills_dir}")
 
-    out: list[tuple[str, str, str | None]] = []
+    out: list[tuple[str, str | None]] = []
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
         text = skill_md.read_text(encoding="utf-8")
         try:
@@ -114,13 +96,12 @@ def collect_skills(dist: Path) -> list[tuple[str, str, str | None]]:
                 f"{skill_md}: skill dir {skill_md.parent.name!r} does not match "
                 f"frontmatter name {name!r}"
             )
-        description = fm.get("description") or ""
         argument_hint = fm.get("argument-hint") or None
-        out.append((name, description, argument_hint))
+        out.append((name, argument_hint))
     return out
 
 
-def write_commands(dist: Path, skills: list[tuple[str, str, str | None]]) -> list[Path]:
+def write_commands(dist: Path, skills: list[tuple[str, str | None]]) -> list[Path]:
     commands_dir = dist / "commands"
     # Always start from a clean dir so renames in dist/skills/ propagate cleanly.
     if commands_dir.exists():
@@ -128,9 +109,8 @@ def write_commands(dist: Path, skills: list[tuple[str, str, str | None]]) -> lis
     commands_dir.mkdir(parents=True)
 
     written: list[Path] = []
-    for name, description, argument_hint in skills:
-        short = shorten_description(description)
-        body = render_command(name, short, argument_hint)
+    for name, argument_hint in skills:
+        body = render_command(name, argument_hint)
         out_path = commands_dir / f"{name}.md"
         out_path.write_text(body, encoding="utf-8")
         written.append(out_path)
