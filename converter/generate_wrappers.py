@@ -61,6 +61,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -350,11 +351,28 @@ DEFAULT_HOOK_RULES = {
     "rules": [
         {
             "keywords": [
-                "security", "vuln", "vulnerab", "OWASP", "injection", "XSS",
-                "CSRF", "SSRF", "auth ", "auth-", "JWT", "OAuth",
-                "mass assignment", "sanitiz", "hardcoded secret", "credential leak",
-                "open redirect", "deserialization", "is this safe",
-                "paranoid review", "is it safe to ship", "before we ship",
+                "security",
+                "vuln",
+                "vulnerab",
+                "OWASP",
+                "injection",
+                "XSS",
+                "CSRF",
+                "SSRF",
+                "auth ",
+                "auth-",
+                "JWT",
+                "OAuth",
+                "mass assignment",
+                "sanitiz",
+                "hardcoded secret",
+                "credential leak",
+                "open redirect",
+                "deserialization",
+                "is this safe",
+                "paranoid review",
+                "is it safe to ship",
+                "before we ship",
             ],
             "persona": "ce-security-sentinel",
             "phrasing": (
@@ -367,10 +385,20 @@ DEFAULT_HOOK_RULES = {
         },
         {
             "keywords": [
-                "factor out", "extract method", "extract class", "duplicat",
-                "copy-pasted", "DRY", "coupling", "abstraction", "boundaries",
-                "structural refactor", "service boundaries", "module bound",
-                "pattern compliance", "design integrity",
+                "factor out",
+                "extract method",
+                "extract class",
+                "duplicat",
+                "copy-pasted",
+                "DRY",
+                "coupling",
+                "abstraction",
+                "boundaries",
+                "structural refactor",
+                "service boundaries",
+                "module bound",
+                "pattern compliance",
+                "design integrity",
             ],
             "persona": "ce-architecture-strategist",
             "phrasing": (
@@ -382,10 +410,16 @@ DEFAULT_HOOK_RULES = {
         },
         {
             "keywords": [
-                "YAGNI", "over-engineered", "premature abstraction",
-                "redundant abstraction", "simplify", "simpler way",
-                "is this too clever", "unnecessary indirection",
-                "feels overcomplicated", "could this be simpler",
+                "YAGNI",
+                "over-engineered",
+                "premature abstraction",
+                "redundant abstraction",
+                "simplify",
+                "simpler way",
+                "is this too clever",
+                "unnecessary indirection",
+                "feels overcomplicated",
+                "could this be simpler",
             ],
             "persona": "ce-code-simplicity-reviewer",
             "phrasing": (
@@ -396,9 +430,15 @@ DEFAULT_HOOK_RULES = {
         },
         {
             "keywords": [
-                "edge case", "off-by-one", "race condition", "deadlock",
-                "concurrency bug", "correctness", "logic bug",
-                "is this correct", "boundary condition",
+                "edge case",
+                "off-by-one",
+                "race condition",
+                "deadlock",
+                "concurrency bug",
+                "correctness",
+                "logic bug",
+                "is this correct",
+                "boundary condition",
             ],
             "persona": "ce-correctness-reviewer",
             "phrasing": (
@@ -409,8 +449,12 @@ DEFAULT_HOOK_RULES = {
         },
         {
             "keywords": [
-                "naming consistency", "convention drift", "style consistency",
-                "naming pattern", "matches existing", "consistent with",
+                "naming consistency",
+                "convention drift",
+                "style consistency",
+                "naming pattern",
+                "matches existing",
+                "consistent with",
                 "follow the pattern",
             ],
             "persona": "ce-pattern-recognition-specialist",
@@ -422,8 +466,14 @@ DEFAULT_HOOK_RULES = {
         },
         {
             "keywords": [
-                "performance", "latency", "bottleneck", "slow query",
-                "N+1", "p99", "throughput", "memory pressure",
+                "performance",
+                "latency",
+                "bottleneck",
+                "slow query",
+                "N+1",
+                "p99",
+                "throughput",
+                "memory pressure",
             ],
             "persona": "ce-performance-oracle",
             "phrasing": (
@@ -432,7 +482,7 @@ DEFAULT_HOOK_RULES = {
                 "performance review."
             ),
         },
-    ]
+    ],
 }
 
 
@@ -517,266 +567,38 @@ def write_meta_skill(dist: Path) -> Path:
 # `ce-lite-persona: <reason>` prefix.
 
 
+_RESOLVER_SOURCE_PATH = Path(__file__).parent / "resources" / "ce-lite-persona"
+
+
 def render_persona_resolver() -> str:
-    """Emit dist/bin/ce-lite-persona — the dispatch resolver shim."""
-    return '''#!/usr/bin/env python3
-"""ce-lite-persona — resolve a persona name to its prompt file or body.
+    """Read the resolver source. Preserved for tests that assert against content.
 
-Generated by ce-lite converter (converter/generate_wrappers.py).
-Don't edit; regenerate from the converter.
-
-The plugin's `bin/` is on PATH because Claude Code exports it for installed
-plugins, so dispatch sites in skill bodies invoke this directly:
-
-    ce-lite-persona ce-security-sentinel --prefix [--via ce-code-review]
-                                                  # full prompt prefix:
-                                                  # body + trace tag +
-                                                  # tool-restriction preamble.
-                                                  # Concatenate with the task
-                                                  # to form Agent.prompt.
-    ce-lite-persona ce-security-sentinel --body   # bare prompt body only
-    ce-lite-persona ce-security-sentinel --path   # absolute path
-    ce-lite-persona --list                        # tab-separated catalog
-    ce-lite-persona --diagnose                    # install health check
-
-Plugin-root resolution order:
-  1. $CLAUDE_PLUGIN_ROOT if set and contains .claude-plugin/plugin.json.
-  2. Walk up from this script's resolved location.
-
-Persona names accept the canonical form (`ce-security-sentinel`) or the
-bare form (`security-sentinel`).
-
-The task content NEVER passes through argv on a --prefix call — only the
-persona name and dispatch source do. Arbitrary user task content (quotes,
-backticks, dollar signs, newlines) is safe because the caller concatenates
-the resolver's stdout with the task inside the Agent.prompt JSON parameter,
-which bash never sees.
-"""
-from __future__ import annotations
-
-import argparse
-import json
-import os
-import sys
-from pathlib import Path
-
-
-def find_plugin_root() -> Path:
-    env_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if env_root:
-        root = Path(env_root)
-        if (root / ".claude-plugin" / "plugin.json").is_file():
-            return root
-    here = Path(__file__).resolve().parent
-    for cand in [here, *here.parents]:
-        if (cand / ".claude-plugin" / "plugin.json").is_file():
-            return cand
-    sys.exit(
-        "ce-lite-persona: could not locate plugin root "
-        "(checked $CLAUDE_PLUGIN_ROOT and parents of this script). "
-        "Plugin may not be fully installed."
-    )
-
-
-def load_manifest(root: Path) -> dict:
-    path = root / "references" / "agent-prompts" / "manifest.json"
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: missing manifest at {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        sys.exit(f"ce-lite-persona: malformed manifest at {path}: {exc}")
-
-
-def canonicalize(name: str) -> str:
-    return name if name.startswith("ce-") else f"ce-{name}"
-
-
-def find_persona(manifest: dict, name: str) -> dict:
-    canonical = canonicalize(name)
-    for agent in manifest.get("agents", []):
-        if agent.get("name") == canonical:
-            return agent
-    known = ", ".join(sorted(a["name"] for a in manifest.get("agents", [])))
-    sys.exit(
-        f"ce-lite-persona: unknown persona '{name}'. "
-        f"Known personas: {known}"
-    )
-
-
-def cmd_path(root: Path, persona: dict) -> int:
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(
-            f"ce-lite-persona: prompt file missing: {path} "
-            f"(manifest declares it; partial install?)"
-        )
-    print(path)
-    return 0
-
-
-def cmd_body(root: Path, persona: dict) -> int:
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
-    sys.stdout.write(path.read_text(encoding="utf-8"))
-    return 0
-
-
-# Recognised dispatch sources for --via. Anything outside this set is rejected
-# (typo defence). Keep this list in sync with the wrapper templates that pass
-# --via and the generated meta-skill/panel/orchestrator preambles.
-DISPATCH_SOURCES = {
-    "ce-ask-direct",   # /ce-ask-<persona> wrapper
-    "ce-ask-meta",     # /ce-ask <persona> ...
-    "ce-ask-panel",    # /ce-ask-panel a,b,c ...
-    "ce-code-review",
-    "ce-doc-review",
-    "ce-resolve-pr-feedback",
-}
-
-
-def cmd_prefix(root: Path, persona: dict, via: str) -> int:
-    """Emit the full dispatch prompt prefix: body + trace tag + tool restriction.
-
-    Concatenate this with the user task to form the Agent.prompt parameter.
-    The task never touches argv here (and never touches Bash either when the
-    caller does it via the Agent tool's structured parameter), so there is no
-    shell-quoting risk for arbitrary task content.
+    The build path uses write_persona_resolver() which copies the file directly.
     """
-    if via not in DISPATCH_SOURCES:
-        sys.exit(
-            f"ce-lite-persona: unknown --via dispatch source: '{via}'. "
-            f"Known sources: {', '.join(sorted(DISPATCH_SOURCES))}"
-        )
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
-
-    body = path.read_text(encoding="utf-8").rstrip("\\n")
-    tools = persona.get("tools") or []
-    tools_str = ", ".join(tools) if tools else "any"
-    model = persona.get("model") or "inherit"
-    name = persona["name"]
-
-    preamble = (
-        f"[ce-persona={name} via={via}]\\n"
-        f"\\n"
-        f"You are operating as the {name} specialist. Manifest declares this "
-        f"role uses tools=[{tools_str}] and model={model}. Honour those "
-        f"constraints: if a task pulls you toward tools outside that set, "
-        f"stop and explain why your role requires it — don't silently broaden "
-        f"scope.\\n"
-    )
-
-    sys.stdout.write(body + "\\n\\n" + preamble)
-    return 0
-
-
-def cmd_list(manifest: dict) -> int:
-    for agent in manifest.get("agents", []):
-        desc = (agent.get("description", "") or "").splitlines()
-        first_line = desc[0] if desc else ""
-        sys.stdout.write(f"{agent['name']}\\t{first_line}\\n")
-    return 0
-
-
-def cmd_diagnose(root: Path, manifest: dict) -> int:
-    sys.stdout.write(f"plugin_root: {root}\\n")
-    sys.stdout.write(
-        f"manifest:    {root / 'references' / 'agent-prompts' / 'manifest.json'}\\n"
-    )
-    sys.stdout.write(f"personas:    {len(manifest.get('agents', []))}\\n")
-    missing = [
-        a["name"] for a in manifest.get("agents", [])
-        if not (root / a["prompt_path"]).is_file()
-    ]
-    if missing:
-        sys.stderr.write(
-            f"ce-lite-persona: missing prompt files for: {', '.join(missing)}\\n"
-        )
-        return 1
-    sys.stdout.write("status:      ok\\n")
-    return 0
-
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="ce-lite-persona",
-        description=(
-            "Resolve a ce-lite persona name to its prompt file path or body. "
-            "Invoked from generated SKILL.md dispatch sites and orchestrator "
-            "preambles to avoid the per-dispatch glob/find dance."
-        ),
-    )
-    parser.add_argument(
-        "persona", nargs="?",
-        help="canonical (ce-security-sentinel) or bare (security-sentinel) name",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--path", action="store_true",
-        help="print absolute path to the persona's prompt file",
-    )
-    group.add_argument(
-        "--body", action="store_true",
-        help="cat the prompt file contents to stdout (default)",
-    )
-    group.add_argument(
-        "--prefix", action="store_true",
-        help=(
-            "emit the full dispatch prompt prefix (body + trace tag + "
-            "tool-restriction preamble), ready to concatenate with the task. "
-            "Use with --via to record the dispatch source in the trace tag."
-        ),
-    )
-    group.add_argument(
-        "--list", action="store_true", dest="list_all",
-        help="list all available personas (name<TAB>description)",
-    )
-    group.add_argument(
-        "--diagnose", action="store_true",
-        help="print plugin root, manifest path, and per-persona prompt presence",
-    )
-    parser.add_argument(
-        "--via", default="ce-ask-direct",
-        help=(
-            "dispatch source recorded in the [ce-persona=NAME via=SOURCE] "
-            "trace tag emitted by --prefix. Defaults to ce-ask-direct."
-        ),
-    )
-    args = parser.parse_args(argv)
-
-    root = find_plugin_root()
-    manifest = load_manifest(root)
-
-    if args.list_all:
-        return cmd_list(manifest)
-    if args.diagnose:
-        return cmd_diagnose(root, manifest)
-    if not args.persona:
-        parser.error(
-            "persona name required unless --list or --diagnose is given"
-        )
-    persona = find_persona(manifest, args.persona)
-    if args.path:
-        return cmd_path(root, persona)
-    if args.prefix:
-        return cmd_prefix(root, persona, args.via)
-    return cmd_body(root, persona)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
-'''
+    if not _RESOLVER_SOURCE_PATH.is_file():
+        raise FileNotFoundError(f"missing resolver source at {_RESOLVER_SOURCE_PATH}")
+    return _RESOLVER_SOURCE_PATH.read_text(encoding="utf-8")
 
 
 def write_persona_resolver(dist: Path) -> Path:
-    """Emit dist/bin/ce-lite-persona, executable."""
+    """Copy converter/resources/ce-lite-persona → dist/bin/ce-lite-persona.
+
+    Resolver source lives at converter/resources/ce-lite-persona as a real
+    Python file (lintable, testable, syntax-highlighted in editors). The
+    generator stamps it into dist/bin/ at build time. Keep that source
+    stdlib-only and free of converter imports — it ships to end-user
+    installs and runs there independently.
+    """
     bin_dir = dist / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     resolver_path = bin_dir / "ce-lite-persona"
-    resolver_path.write_text(render_persona_resolver(), encoding="utf-8")
+    if not _RESOLVER_SOURCE_PATH.is_file():
+        raise FileNotFoundError(
+            f"missing resolver source at {_RESOLVER_SOURCE_PATH} — "
+            "converter/resources/ce-lite-persona must exist for the build to "
+            "stamp it into dist/bin/."
+        )
+    shutil.copy2(_RESOLVER_SOURCE_PATH, resolver_path)
     resolver_path.chmod(0o755)
     return resolver_path
 
@@ -806,26 +628,32 @@ def write_persona_resolver(dist: Path) -> Path:
 
 def render_hook_config() -> str:
     """Emit dist/hooks/hooks.json — Claude Code's hook declaration spec."""
-    return json.dumps({
-        "description": (
-            "ce-lite UserPromptSubmit hook: detect review-flavored prompts and "
-            "suggest invoking the matching specialist persona wrapper. Pure "
-            "keyword matching; no LLM call per prompt; no idle-context cost."
-        ),
-        "hooks": {
-            "UserPromptSubmit": [
-                {
-                    "hooks": [
+    return (
+        json.dumps(
+            {
+                "description": (
+                    "ce-lite UserPromptSubmit hook: detect review-flavored prompts and "
+                    "suggest invoking the matching specialist persona wrapper. Pure "
+                    "keyword matching; no LLM call per prompt; no idle-context cost."
+                ),
+                "hooks": {
+                    "UserPromptSubmit": [
                         {
-                            "type": "command",
-                            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
-                            "timeout": 5,
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
+                                    "timeout": 5,
+                                }
+                            ]
                         }
                     ]
-                }
-            ]
-        },
-    }, indent=2) + "\n"
+                },
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 def render_hook_rules() -> str:
@@ -1118,7 +946,9 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
         return 2
 
     converter_dir = (
-        Path(converter_arg).resolve() if converter_arg else Path(__file__).resolve().parent
+        Path(converter_arg).resolve()
+        if converter_arg
+        else Path(__file__).resolve().parent
     )
 
     personas = load_manifest(dist)
@@ -1127,7 +957,9 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
     used_overrides = 0
     written: list[Path] = []
     for persona in personas:
-        description = overrides.get(persona.name, passA_description(persona.description))
+        description = overrides.get(
+            persona.name, passA_description(persona.description)
+        )
         if persona.name in overrides:
             used_overrides += 1
         written.append(write_wrapper(dist, persona, description))
