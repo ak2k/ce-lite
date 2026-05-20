@@ -447,7 +447,7 @@ def test_render_panel_description_is_substantive():
 import json as _json  # noqa: E402  # local alias to avoid clashing with module-level imports
 
 from generate_wrappers import (  # noqa: E402
-    DEFAULT_HOOK_RULES,
+    HAIKU_CONFIG,
     META_SKILL_DESCRIPTION,
     render_hook_config,
     render_hook_rules,
@@ -608,10 +608,30 @@ def test_hook_script_handles_empty_payload_silently():
     assert "if not isinstance(user_prompt, str)" in src or "not user_prompt" in src
 
 
-def test_default_hook_rules_match_render():
-    """Sanity: the constant DEFAULT_HOOK_RULES is what render_hook_rules emits."""
+def test_render_hook_rules_emits_haiku_config_block():
+    """The config block sources from the HAIKU_CONFIG constant, unchanged."""
     rendered = _json.loads(render_hook_rules())
-    assert rendered == DEFAULT_HOOK_RULES
+    assert rendered["config"] == HAIKU_CONFIG
+
+
+def test_render_hook_rules_covers_all_personas():
+    """Pass A generates a rule per persona in the manifest; Pass B may override
+    keywords/phrasing but doesn't remove rules. Total rule count == persona count."""
+    from generate_wrappers import load_manifest
+
+    rendered = _json.loads(render_hook_rules())
+    personas = load_manifest(Path(__file__).resolve().parent.parent / "dist")
+    assert len(rendered["rules"]) == len(personas), (
+        f"expected one rule per persona; got {len(rendered['rules'])} rules "
+        f"for {len(personas)} personas"
+    )
+    rule_personas = {r["persona"] for r in rendered["rules"]}
+    manifest_personas = {p.name for p in personas}
+    assert rule_personas == manifest_personas, (
+        f"rule personas don't match manifest: "
+        f"missing={manifest_personas - rule_personas}, "
+        f"extra={rule_personas - manifest_personas}"
+    )
 
 
 # -------- hook script live runtime tests (Phase B.7) --------
@@ -780,17 +800,17 @@ def test_hook_runtime_works_when_rules_missing():
 
 def test_default_config_has_haiku_disabled():
     """Haiku is opt-in. Default config must not auto-enable it."""
-    from generate_wrappers import DEFAULT_HOOK_RULES
+    from generate_wrappers import HAIKU_CONFIG
 
-    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    cfg = HAIKU_CONFIG["haiku_classifier"]
     assert cfg["enabled"] is False
 
 
 def test_default_config_haiku_caps_budget_and_timeout():
     """Sane defaults for cost/latency. Bounds the worst case."""
-    from generate_wrappers import DEFAULT_HOOK_RULES
+    from generate_wrappers import HAIKU_CONFIG
 
-    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    cfg = HAIKU_CONFIG["haiku_classifier"]
     assert 0 < cfg["max_budget_usd"] <= 0.05  # don't accidentally spend $5/prompt
     assert 0 < cfg["timeout_seconds"] <= 30  # bound latency
 

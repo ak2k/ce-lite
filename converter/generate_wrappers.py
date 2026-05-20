@@ -63,8 +63,11 @@ import json
 import re
 import shutil
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 CONDITIONAL_PREFIX_RE = re.compile(
     r"^Conditional\s+[a-z][a-z\-/]*\s+persona,\s+selected\s+when\s+",
@@ -116,65 +119,30 @@ def load_manifest(dist: Path) -> list[Persona]:
 def load_overrides(converter_dir: Path) -> dict[str, str]:
     """Load overrides/persona-descriptions.yaml as a flat name→description map.
 
-    Format (light-touch YAML, no nesting):
-
-        ce-security-sentinel: |
-          Use when reviewing for security issues...
-        ce-architecture-strategist: "Use when ..."
-
-    Empty file or missing file returns {}. Keep the parser deliberately
-    minimal — overrides are populated by skill-creator and committed to
-    the repo, not edited at scale by hand.
+    Empty / missing file returns {}.
     """
     overrides_path = converter_dir / "overrides" / "persona-descriptions.yaml"
     if not overrides_path.is_file():
         return {}
-    text = overrides_path.read_text(encoding="utf-8")
-    result: dict[str, str] = {}
-    current_key: str | None = None
-    current_val: list[str] = []
-    block_indent: int | None = None
-    for raw_line in text.splitlines():
-        # Skip pure comments / blank lines at top level.
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            if current_key is None:
-                continue
-        # Top-level key (no leading whitespace, has colon).
-        if raw_line and not raw_line[0].isspace() and ":" in raw_line:
-            # Flush previous key.
-            if current_key is not None:
-                result[current_key] = "\n".join(current_val).rstrip()
-                current_val = []
-                block_indent = None
-            key, _, value = raw_line.partition(":")
-            current_key = key.strip()
-            value = value.strip()
-            if value in ("|", ">", "|-", ">-"):
-                # Block scalar follows on indented lines.
-                continue
-            if value:
-                # Inline scalar; strip optional quotes.
-                if (value.startswith('"') and value.endswith('"')) or (
-                    value.startswith("'") and value.endswith("'")
-                ):
-                    value = value[1:-1]
-                result[current_key] = value
-                current_key = None
-                current_val = []
-                block_indent = None
-            continue
-        # Indented continuation of a block scalar.
-        if current_key is not None and raw_line and raw_line[0].isspace():
-            # Establish block indent on first content line.
-            indent = len(raw_line) - len(raw_line.lstrip())
-            if block_indent is None:
-                block_indent = indent
-            # Strip the common indent.
-            current_val.append(raw_line[block_indent:])
-    if current_key is not None:
-        result[current_key] = "\n".join(current_val).rstrip()
-    return result
+    raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        return {}
+    # PyYAML preserves the trailing newline ending a block scalar; descriptions
+    # shouldn't carry trailing whitespace into the generated SKILL.md frontmatter.
+    return {k: v.rstrip() if isinstance(v, str) else "" for k, v in raw.items()}
+
+
+def load_keyword_overrides(converter_dir: Path) -> dict[str, dict]:
+    """Load overrides/persona-keywords.yaml → {persona_name: {keywords?, phrasing?}}.
+
+    Pass B output. Each persona may override `keywords` (list[str]) and/or
+    `phrasing` (str). Anything not listed keeps the Pass A defaults.
+    """
+    overrides_path = converter_dir / "overrides" / "persona-keywords.yaml"
+    if not overrides_path.is_file():
+        return {}
+    raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8")) or {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def wrapper_name(persona_name: str) -> str:
@@ -328,162 +296,389 @@ META_SKILL_DESCRIPTION = (
 )
 
 
-DEFAULT_HOOK_RULES = {
-    "config": {
-        "haiku_classifier": {
-            "enabled": False,
-            "model": "haiku",
-            "max_budget_usd": 0.005,
-            "timeout_seconds": 8,
-            "min_confidence": 0.6,
-            "_doc": (
-                "Optional Haiku-based intent classifier. When enabled, the "
-                "hook falls back to a Haiku call if keyword matching produces "
-                "no hit. Haiku reads the user prompt + persona catalog and "
-                "returns a structured suggestion. Adds ~1–2s latency per "
-                "non-keyword-matching prompt and ~$0.001 quota each. Set "
-                "enabled=true to opt in. The keyword path always runs first "
-                "(cheap and deterministic); Haiku is the no-keyword "
-                "fallback only."
-            ),
-        }
-    },
-    "rules": [
-        {
-            "keywords": [
-                "security",
-                "vuln",
-                "vulnerab",
-                "OWASP",
-                "injection",
-                "XSS",
-                "CSRF",
-                "SSRF",
-                "auth ",
-                "auth-",
-                "JWT",
-                "OAuth",
-                "mass assignment",
-                "sanitiz",
-                "hardcoded secret",
-                "credential leak",
-                "open redirect",
-                "deserialization",
-                "is this safe",
-                "paranoid review",
-                "is it safe to ship",
-                "before we ship",
-            ],
-            "persona": "ce-security-sentinel",
-            "phrasing": (
-                "The prompt looks security-flavored. Consider running "
-                "`/ce-lite:ce-ask-security-sentinel` (or invoking the wrapper "
-                "via Skill) for a focused security review by a specialist "
-                "persona. The wrapper dispatches a sub-agent grounded in "
-                "OWASP / injection / authn-authz / secrets-handling expertise."
-            ),
-        },
-        {
-            "keywords": [
-                "factor out",
-                "extract method",
-                "extract class",
-                "duplicat",
-                "copy-pasted",
-                "DRY",
-                "coupling",
-                "abstraction",
-                "boundaries",
-                "structural refactor",
-                "service boundaries",
-                "module bound",
-                "pattern compliance",
-                "design integrity",
-            ],
-            "persona": "ce-architecture-strategist",
-            "phrasing": (
-                "Architecture/design concerns visible. Consider "
-                "`/ce-lite:ce-ask-architecture-strategist` for a structural "
-                "review (pattern compliance, layer violations, naming "
-                "consistency)."
-            ),
-        },
-        {
-            "keywords": [
-                "YAGNI",
-                "over-engineered",
-                "premature abstraction",
-                "redundant abstraction",
-                "simplify",
-                "simpler way",
-                "is this too clever",
-                "unnecessary indirection",
-                "feels overcomplicated",
-                "could this be simpler",
-            ],
-            "persona": "ce-code-simplicity-reviewer",
-            "phrasing": (
-                "Simplicity concerns visible. Consider "
-                "`/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/"
-                "redundancy review."
-            ),
-        },
-        {
-            "keywords": [
-                "edge case",
-                "off-by-one",
-                "race condition",
-                "deadlock",
-                "concurrency bug",
-                "correctness",
-                "logic bug",
-                "is this correct",
-                "boundary condition",
-            ],
-            "persona": "ce-correctness-reviewer",
-            "phrasing": (
-                "Correctness concerns visible. Consider "
-                "`/ce-lite:ce-ask-correctness-reviewer` for an edge-case / "
-                "boundary-condition review."
-            ),
-        },
-        {
-            "keywords": [
-                "naming consistency",
-                "convention drift",
-                "style consistency",
-                "naming pattern",
-                "matches existing",
-                "consistent with",
-                "follow the pattern",
-            ],
-            "persona": "ce-pattern-recognition-specialist",
-            "phrasing": (
-                "Pattern/consistency review may help. Consider "
-                "`/ce-lite:ce-ask-pattern-recognition-specialist` to surface "
-                "duplication and convention drift."
-            ),
-        },
-        {
-            "keywords": [
-                "performance",
-                "latency",
-                "bottleneck",
-                "slow query",
-                "N+1",
-                "p99",
-                "throughput",
-                "memory pressure",
-            ],
-            "persona": "ce-performance-oracle",
-            "phrasing": (
-                "Performance angle visible. Consider "
-                "`/ce-lite:ce-ask-performance-oracle` for a structured "
-                "performance review."
-            ),
-        },
-    ],
+HAIKU_CONFIG = {
+    "haiku_classifier": {
+        "enabled": False,
+        "model": "haiku",
+        "max_budget_usd": 0.005,
+        "timeout_seconds": 8,
+        "min_confidence": 0.6,
+        "_doc": (
+            "Optional Haiku-based intent classifier. When enabled, the "
+            "hook falls back to a Haiku call if keyword matching produces "
+            "no hit. Haiku reads the user prompt + persona catalog and "
+            "returns a structured suggestion. Adds ~1–2s latency per "
+            "non-keyword-matching prompt and ~$0.001 quota each. Set "
+            "enabled=true to opt in. The keyword path always runs first "
+            "(cheap and deterministic); Haiku is the no-keyword "
+            "fallback only."
+        ),
+    }
 }
+
+
+# Stopword set for Pass A keyword extraction.
+#
+# Two categories:
+#   1. English function words (a, the, is, of, ...) — would never be useful
+#      keywords because they appear in nearly every prompt.
+#   2. Code-review meta-language (code, review, check, analyze, verify,
+#      specialist, persona, ...) — appears across many descriptions AND
+#      across many user prompts. If kept as keywords, every persona rule
+#      fires on every prompt and the hook becomes noise.
+#
+# This is the static defence. The adaptive defence (_compute_too_generic)
+# catches corpus-level drift as upstream adds personas.
+STOPWORDS: set[str] = {
+    # English function words
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "so",
+    "such",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "these",
+    "this",
+    "to",
+    "with",
+    "without",
+    "you",
+    "your",
+    "if",
+    "no",
+    "not",
+    "but",
+    "into",
+    "out",
+    "up",
+    "down",
+    "over",
+    "under",
+    "across",
+    "between",
+    "during",
+    "above",
+    "below",
+    "before",
+    "after",
+    "off",
+    # Code-review meta-verbs (would fire on almost every prompt)
+    "code",
+    "codes",
+    "review",
+    "reviews",
+    "reviewing",
+    "check",
+    "checks",
+    "checking",
+    "checker",
+    "analyze",
+    "analyzes",
+    "analyzing",
+    "analysis",
+    "evaluate",
+    "evaluates",
+    "evaluation",
+    "examine",
+    "examines",
+    "consider",
+    "considering",
+    "ensure",
+    "ensures",
+    "ensuring",
+    "verify",
+    "verifies",
+    "verification",
+    "validate",
+    "validates",
+    "detect",
+    "detects",
+    "detection",
+    "identify",
+    "identifies",
+    # "Use when ..." prefix language and similar meta-framing
+    "use",
+    "uses",
+    "used",
+    "using",
+    "when",
+    "where",
+    "which",
+    # Generic role nouns (the description usually has them — keep them
+    # out so they don't fire as keywords)
+    "specialist",
+    "persona",
+    "expert",
+    "agent",
+    "reviewer",
+    "researcher",
+    "analyst",
+    "analyzer",
+    "strategist",
+    "guardian",
+    "sentinel",
+    "oracle",
+    "writer",
+    "hunter",
+    "iterator",
+    "resolver",
+    "detector",
+    "historian",
+    # Modal qualifiers
+    "any",
+    "all",
+    "every",
+    "some",
+    "may",
+    "might",
+    "should",
+    "must",
+    "can",
+    "would",
+    "could",
+    "will",
+    "shall",
+    # Pronouns
+    "i",
+    "we",
+    "they",
+    "he",
+    "she",
+    "her",
+    "his",
+    "our",
+    "us",
+    "me",
+    # Common adverbs / quantifiers
+    "very",
+    "much",
+    "more",
+    "less",
+    "most",
+    "least",
+    "well",
+    "also",
+    "still",
+    "yet",
+    "already",
+    "again",
+    "further",
+    # Verbs that imply review meta-process
+    "fix",
+    "fixes",
+    "fixed",
+    "fixing",
+    "report",
+    "reports",
+    "reporting",
+    "surface",
+    "surfaces",
+    "surfacing",
+    # Connective / common adjectives
+    "real",
+    "good",
+    "bad",
+    "specific",
+    "general",
+    "different",
+    "same",
+    "new",
+    "old",
+    "current",
+    "future",
+    "past",
+    "given",
+    "common",
+    "based",
+    "across",
+    # Light connectors
+    "then",
+    "another",
+    "other",
+    "those",
+    "each",
+    "either",
+    "neither",
+    # Top-of-prompt addressing
+    "please",
+    "help",
+    # The plugin's own prefix (often appears in descriptions of orchestrators
+    # that delegate to other ce-* personas)
+    "ce",
+}
+
+
+# Persona-role suffixes — stripped from the persona name to expose the
+# distinguishing topic tokens. Mirrors converter/DISPATCH_PATTERNS.py
+# (cannot import from there: this is the suffix-stripping use, that one
+# is the regex-detection use; coupling them risks accidental drift).
+_NAME_SUFFIXES_TO_STRIP: tuple[str, ...] = (
+    "reviewer",
+    "researcher",
+    "analyst",
+    "analyzer",
+    "expert",
+    "specialist",
+    "strategist",
+    "guardian",
+    "sentinel",
+    "oracle",
+    "writer",
+    "hunter",
+    "iterator",
+    "resolver",
+    "agent",
+    "detector",
+    "historian",
+    "sync",
+)
+
+
+_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'-]+")
+_ACRONYM_RE = re.compile(r"\b[A-Z]{3,}\b")
+
+
+def _tokenize(text: str) -> list[str]:
+    """Tokenize description text. Returns lowercase content tokens."""
+    return [t.lower() for t in _TOKEN_RE.findall(text)]
+
+
+def _find_acronyms(text: str) -> set[str]:
+    """Return ALL-CAPS tokens of ≥3 chars, preserving original casing.
+
+    Used to keep "OWASP", "JWT", "CSRF" uppercase in keyword output instead
+    of lowercasing during tokenization. The matcher is case-insensitive so
+    behavior is identical; cosmetic gain in the generated rules file.
+    """
+    return set(_ACRONYM_RE.findall(text))
+
+
+def _compute_too_generic(descriptions: list[str], threshold: float = 0.20) -> set[str]:
+    """Identify tokens appearing in >threshold fraction of descriptions.
+
+    Adaptive complement to STOPWORDS — catches corpus-level generic terms
+    that aren't in the static list. Threshold default 0.20 means a token
+    appearing in >9/49 personas (>20%) gets flagged.
+    """
+    df: Counter[str] = Counter()
+    for d in descriptions:
+        df.update(set(_tokenize(d)) - STOPWORDS)
+    n = max(len(descriptions), 1)
+    return {w for w, c in df.items() if c / n > threshold}
+
+
+def _consecutive_bigrams(text: str, drop: set[str]) -> list[str]:
+    """Extract bigrams of two adjacent content words from the original text.
+
+    Walks tokens in their original positions; emits "tok_a tok_b" when
+    both survive the stopword/generic filter AND they're adjacent (no
+    intervening dropped token). Higher precision than singletons:
+    "data migration" fires on the phrase; "data" alone fires on any
+    DB-related prompt.
+    """
+    tokens = _tokenize(text)
+    out: list[str] = []
+    for a, b in zip(tokens, tokens[1:]):
+        if a not in drop and b not in drop:
+            out.append(f"{a} {b}")
+    return out
+
+
+def _derive_name_keywords(persona_name: str) -> list[str]:
+    """Strip ce- prefix + role suffix; remaining tokens are high-precision."""
+    bare = persona_name[3:] if persona_name.startswith("ce-") else persona_name
+    parts = bare.split("-")
+    while parts and parts[-1] in _NAME_SUFFIXES_TO_STRIP:
+        parts.pop()
+    if not parts:
+        return []
+    phrase = " ".join(parts)
+    out = [phrase]
+    last = parts[-1]
+    # English regular-plural singularization
+    if len(last) > 4 and last.endswith("s") and not last.endswith("ss"):
+        out.append(" ".join(parts[:-1] + [last[:-1]]))
+    return out
+
+
+def derive_keyword_rule(
+    persona: Persona,
+    too_generic: set[str],
+    acronyms_by_persona: dict[str, set[str]],
+) -> dict:
+    """Pass A: derive a baseline hook rule from manifest description + name.
+
+    The output dict matches a skill-rules.json rule entry. Combines:
+      bigrams (highest precision) → name-derived keywords → singletons.
+    Caps at 10 keywords. Restores acronym casing (OWASP, CSRF) where
+    applicable. Phrasing is a template; Pass B overrides supply richer
+    per-persona phrasing where curated.
+    """
+    desc = persona.description
+    drop = STOPWORDS | too_generic
+    acronyms = acronyms_by_persona.get(persona.name, set())
+    acronym_lookup = {a.lower(): a for a in acronyms}
+
+    def restore(tok: str) -> str:
+        return acronym_lookup.get(tok, tok)
+
+    bigrams_raw = _consecutive_bigrams(desc, drop)
+    singletons_raw = [t for t in _tokenize(desc) if t not in drop]
+    name_keywords = _derive_name_keywords(persona.name)
+
+    bigrams = [" ".join(restore(t) for t in b.split(" ")) for b in bigrams_raw]
+    # Short singletons substring-match too aggressively ("user" hits "users.py",
+    # "auth" hits "author", "data" hits "metadata"). Require ≥6 chars unless
+    # the token is an all-uppercase acronym (OWASP, JWT, CSRF) — those are
+    # intentional. Bigrams and name-keywords are exempt because they're
+    # already higher-precision by construction.
+    singletons = [restore(t) for t in singletons_raw if len(t) >= 6 or t.isupper()]
+
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for kw in bigrams + name_keywords + singletons:
+        kw_stripped = kw.strip()
+        if not kw_stripped or kw_stripped.lower() in seen:
+            continue
+        seen.add(kw_stripped.lower())
+        keywords.append(kw_stripped)
+        if len(keywords) >= 10:
+            break
+
+    if not keywords:
+        bare = persona.name[3:] if persona.name.startswith("ce-") else persona.name
+        keywords = [bare]
+
+    bare = persona.name[3:] if persona.name.startswith("ce-") else persona.name
+    return {
+        "keywords": keywords,
+        "persona": persona.name,
+        "phrasing": (
+            f"The prompt looks {bare}-flavored. Consider running "
+            f"`/ce-lite:{wrapper_name(persona.name)}` for a focused review "
+            f"by the {bare} specialist."
+        ),
+    }
 
 
 def render_meta_skill() -> str:
@@ -656,16 +851,41 @@ def render_hook_config() -> str:
     )
 
 
-def render_hook_rules() -> str:
-    """Emit dist/hooks/skill-rules.json — keyword → persona suggestion table.
+def render_hook_rules(dist: Path | None = None) -> str:
+    """Compute and serialize dist/hooks/skill-rules.json.
 
-    This file is the curated extension point. Each release of the converter
-    can ship updated default rules; downstream users can override by replacing
-    skill-rules.json with their own (any plugin-cache rebuild from upstream
-    overwrites it, so persistent customisation should live in a separate
-    user-level hook). Keywords are case-insensitive substring matches.
+    Two-pass keyword generation:
+      Pass A: derive baseline rule per persona from manifest description +
+              name (see derive_keyword_rule). Deterministic, no LLM.
+      Pass B: per-persona overrides from converter/overrides/persona-keywords.yaml
+              replace keywords and/or phrasing where curated.
+
+    Rules are sorted alphabetically by persona name so the output diff is
+    stable across rebuilds. The runtime hook (auto_suggest.py) reads the
+    keywords case-insensitively and caps suggestions at MAX_SUGGESTIONS.
+
+    `dist` defaults to the in-tree dist/ so tests and direct invocation
+    work without threading a path through every call site.
     """
-    return json.dumps(DEFAULT_HOOK_RULES, indent=2) + "\n"
+    if dist is None:
+        dist = Path(__file__).parent.parent / "dist"
+    personas = load_manifest(dist)
+    descriptions = [p.description for p in personas]
+    too_generic = _compute_too_generic(descriptions)
+    acronyms_by_persona = {p.name: _find_acronyms(p.description) for p in personas}
+    overrides = load_keyword_overrides(Path(__file__).parent)
+
+    rules: list[dict] = []
+    for p in sorted(personas, key=lambda x: x.name):
+        rule = derive_keyword_rule(p, too_generic, acronyms_by_persona)
+        ovr = overrides.get(p.name, {})
+        if "keywords" in ovr:
+            rule["keywords"] = ovr["keywords"]
+        if "phrasing" in ovr:
+            rule["phrasing"] = ovr["phrasing"].strip()
+        rules.append(rule)
+
+    return json.dumps({"config": HAIKU_CONFIG, "rules": rules}, indent=2) + "\n"
 
 
 _HOOK_SCRIPT_SOURCE_PATH = Path(__file__).parent / "resources" / "auto_suggest.py"

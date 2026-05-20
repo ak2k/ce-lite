@@ -12,6 +12,676 @@
   "rules": [
     {
       "keywords": [
+        "high-stakes documents",
+        "significant architectural",
+        "architectural decisions",
+        "requirements challenges",
+        "challenges premises",
+        "unstated assumptions",
+        "stress-tests decisions",
+        "decisions rather",
+        "evaluating document",
+        "document quality"
+      ],
+      "persona": "ce-adversarial-document-reviewer",
+      "phrasing": "The prompt looks adversarial-document-reviewer-flavored. Consider running `/ce-lite:ce-ask-adversarial-document-reviewer` for a focused review by the adversarial-document-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "large changed",
+        "changed lines",
+        "high-risk domains",
+        "domains like",
+        "like auth",
+        "auth payments",
+        "payments data",
+        "data mutations",
+        "external apis",
+        "apis actively"
+      ],
+      "persona": "ce-adversarial-reviewer",
+      "phrasing": "The prompt looks adversarial-reviewer-flavored. Consider running `/ce-lite:ce-ask-adversarial-reviewer` for a focused review by the adversarial-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "agent-native parity",
+        "action user",
+        "adding ui",
+        "ui features",
+        "system prompts",
+        "agent native",
+        "agent-native",
+        "parity",
+        "action",
+        "adding"
+      ],
+      "persona": "ce-agent-native-reviewer",
+      "phrasing": "The prompt looks agent-native-reviewer-flavored. Consider running `/ce-lite:ce-ask-agent-native-reviewer` for a focused review by the agent-native-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "updates README",
+        "README files",
+        "files following",
+        "following ankane-style",
+        "ankane-style template",
+        "ruby gems",
+        "writing gem",
+        "gem documentation",
+        "imperative voice",
+        "voice concise"
+      ],
+      "persona": "ce-ankane-readme-writer",
+      "phrasing": "The prompt looks ankane-readme-writer-flavored. Consider running `/ce-lite:ce-ask-ankane-readme-writer` for a focused review by the ankane-readme-writer specialist."
+    },
+    {
+      "keywords": [
+        "API routes",
+        "routes request",
+        "request response",
+        "response types",
+        "types serialization",
+        "serialization versioning",
+        "exported type",
+        "type signatures",
+        "breaking contract",
+        "api contract"
+      ],
+      "persona": "ce-api-contract-reviewer",
+      "phrasing": "The prompt looks api-contract-reviewer-flavored. Consider running `/ce-lite:ce-ask-api-contract-reviewer` for a focused review by the api-contract-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "factor out",
+        "extract method",
+        "extract class",
+        "duplicat",
+        "copy-pasted",
+        "DRY",
+        "coupling",
+        "abstraction",
+        "boundaries",
+        "structural refactor",
+        "service boundaries",
+        "module bound",
+        "pattern compliance",
+        "design integrity"
+      ],
+      "persona": "ce-architecture-strategist",
+      "phrasing": "Architecture/design concerns visible. Consider `/ce-lite:ce-ask-architecture-strategist` for a structural review (pattern compliance, layer violations, naming consistency)."
+    },
+    {
+      "keywords": [
+        "synthesizes external",
+        "external best",
+        "best practices",
+        "practices documentation",
+        "need industry",
+        "industry standards",
+        "standards community",
+        "community conventions",
+        "implementation guidance",
+        "best practice"
+      ],
+      "persona": "ce-best-practices-researcher",
+      "phrasing": "The prompt looks best-practices-researcher-flavored. Consider running `/ce-lite:ce-ask-best-practices-researcher` for a focused review by the best-practices-researcher specialist."
+    },
+    {
+      "keywords": [
+        "YAGNI",
+        "over-engineered",
+        "premature abstraction",
+        "redundant abstraction",
+        "simplify",
+        "simpler way",
+        "is this too clever",
+        "unnecessary indirection",
+        "feels overcomplicated",
+        "could this be simpler"
+      ],
+      "persona": "ce-code-simplicity-reviewer",
+      "phrasing": "Simplicity concerns visible. Consider `/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/redundancy review."
+    },
+    {
+      "keywords": [
+        "planning documents",
+        "internal consistency",
+        "consistency contradictions",
+        "sections terminology",
+        "terminology drift",
+        "drift structural",
+        "structural issues",
+        "diverge spawned",
+        "document-review skill",
+        "coherence"
+      ],
+      "persona": "ce-coherence-reviewer",
+      "phrasing": "The prompt looks coherence-reviewer-flavored. Consider running `/ce-lite:ce-ask-coherence-reviewer` for a focused review by the coherence-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "edge case",
+        "off-by-one",
+        "race condition",
+        "deadlock",
+        "concurrency bug",
+        "correctness",
+        "logic bug",
+        "is this correct",
+        "boundary condition"
+      ],
+      "persona": "ce-correctness-reviewer",
+      "phrasing": "Correctness concerns visible. Consider `/ce-lite:ce-ask-correctness-reviewer` for an edge-case / boundary-condition review."
+    },
+    {
+      "keywords": [
+        "database migrations",
+        "migrations data",
+        "data models",
+        "persistent data",
+        "migration safety",
+        "safety data",
+        "data constraints",
+        "constraints transaction",
+        "transaction boundaries",
+        "privacy compliance"
+      ],
+      "persona": "ce-data-integrity-guardian",
+      "phrasing": "The prompt looks data-integrity-guardian-flavored. Consider running `/ce-lite:ce-ask-data-integrity-guardian` for a focused review by the data-integrity-guardian specialist."
+    },
+    {
+      "keywords": [
+        "data migrations",
+        "migrations backfills",
+        "production data",
+        "data transformations",
+        "transformations against",
+        "against reality",
+        "prs involve",
+        "involve id",
+        "id mappings",
+        "mappings column"
+      ],
+      "persona": "ce-data-migration-expert",
+      "phrasing": "The prompt looks data-migration-expert-flavored. Consider running `/ce-lite:ce-ask-data-migration-expert` for a focused review by the data-migration-expert specialist."
+    },
+    {
+      "keywords": [
+        "migration files",
+        "files schema",
+        "data transformations",
+        "backfill scripts",
+        "data integrity",
+        "migration safety",
+        "data migrations",
+        "data migration",
+        "migration",
+        "schema"
+      ],
+      "persona": "ce-data-migrations-reviewer",
+      "phrasing": "The prompt looks data-migrations-reviewer-flavored. Consider running `/ce-lite:ce-ask-data-migrations-reviewer` for a focused review by the data-migrations-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "produces go",
+        "go no-go",
+        "no-go deployment",
+        "deployment checklists",
+        "queries rollback",
+        "rollback procedures",
+        "monitoring plans",
+        "prs touch",
+        "touch production",
+        "production data"
+      ],
+      "persona": "ce-deployment-verification-agent",
+      "phrasing": "The prompt looks deployment-verification-agent-flavored. Consider running `/ce-lite:ce-ask-deployment-verification-agent` for a focused review by the deployment-verification-agent specialist."
+    },
+    {
+      "keywords": [
+        "visually compares",
+        "compares live",
+        "live ui",
+        "ui implementation",
+        "implementation against",
+        "against figma",
+        "figma designs",
+        "provides detailed",
+        "detailed feedback",
+        "modifying HTML"
+      ],
+      "persona": "ce-design-implementation-reviewer",
+      "phrasing": "The prompt looks design-implementation-reviewer-flavored. Consider running `/ce-lite:ce-ask-design-implementation-reviewer` for a focused review by the design-implementation-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "iteratively refines",
+        "refines ui",
+        "ui design",
+        "design through",
+        "through screenshot-analyze-improve",
+        "screenshot-analyze-improve cycles",
+        "aren't coming",
+        "coming together",
+        "user requests",
+        "requests iterative"
+      ],
+      "persona": "ce-design-iterator",
+      "phrasing": "The prompt looks design-iterator-flavored. Consider running `/ce-lite:ce-ask-design-iterator` for a focused review by the design-iterator specialist."
+    },
+    {
+      "keywords": [
+        "planning documents",
+        "missing design",
+        "design decisions",
+        "decisions information",
+        "information architecture",
+        "architecture interaction",
+        "interaction states",
+        "states user",
+        "user flows",
+        "ai slop"
+      ],
+      "persona": "ce-design-lens-reviewer",
+      "phrasing": "The prompt looks design-lens-reviewer-flavored. Consider running `/ce-lite:ce-ask-design-lens-reviewer` for a focused review by the design-lens-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "rails diffs",
+        "diffs introduce",
+        "introduce architectural",
+        "architectural choices",
+        "choices abstractions",
+        "frontend patterns",
+        "opinionated DHH",
+        "DHH perspective",
+        "dhh rails",
+        "dhh rail"
+      ],
+      "persona": "ce-dhh-rails-reviewer",
+      "phrasing": "The prompt looks dhh-rails-reviewer-flavored. Consider running `/ce-lite:ce-ask-dhh-rails-reviewer` for a focused review by the dhh-rails-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "whether proposed",
+        "proposed technical",
+        "technical approaches",
+        "planning documents",
+        "survive contact",
+        "reality architecture",
+        "architecture conflicts",
+        "conflicts dependency",
+        "dependency gaps",
+        "gaps migration"
+      ],
+      "persona": "ce-feasibility-reviewer",
+      "phrasing": "The prompt looks feasibility-reviewer-flavored. Consider running `/ce-lite:ce-ask-feasibility-reviewer` for a focused review by the feasibility-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "visual differences",
+        "web implementation",
+        "figma design",
+        "syncing implementation",
+        "match figma",
+        "figma specs",
+        "visual",
+        "differences",
+        "implementation",
+        "design"
+      ],
+      "persona": "ce-figma-design-sync",
+      "phrasing": "The prompt looks figma-design-sync-flavored. Consider running `/ce-lite:ce-ask-figma-design-sync` for a focused review by the figma-design-sync specialist."
+    },
+    {
+      "keywords": [
+        "gathers comprehensive",
+        "comprehensive documentation",
+        "best practices",
+        "frameworks libraries",
+        "need official",
+        "official docs",
+        "docs version-specific",
+        "version-specific constraints",
+        "implementation patterns",
+        "framework docs"
+      ],
+      "persona": "ce-framework-docs-researcher",
+      "phrasing": "The prompt looks framework-docs-researcher-flavored. Consider running `/ce-lite:ce-ask-framework-docs-researcher` for a focused review by the framework-docs-researcher specialist."
+    },
+    {
+      "keywords": [
+        "performs archaeological",
+        "git history",
+        "understand why",
+        "patterns exist",
+        "need historical",
+        "historical context",
+        "performs",
+        "archaeological",
+        "history",
+        "evolution"
+      ],
+      "persona": "ce-git-history-analyzer",
+      "phrasing": "The prompt looks git-history-analyzer-flavored. Consider running `/ce-lite:ce-ask-git-history-analyzer` for a focused review by the git-history-analyzer specialist."
+    },
+    {
+      "keywords": [
+        "github issues",
+        "recurring themes",
+        "themes pain",
+        "pain patterns",
+        "severity trends",
+        "understanding project's",
+        "project's issue",
+        "issue landscape",
+        "bug patterns",
+        "summarizing what"
+      ],
+      "persona": "ce-issue-intelligence-analyst",
+      "phrasing": "The prompt looks issue-intelligence-analyst-flavored. Consider running `/ce-lite:ce-ask-issue-intelligence-analyst` for a focused review by the issue-intelligence-analyst specialist."
+    },
+    {
+      "keywords": [
+        "async ui",
+        "stimulus turbo",
+        "turbo lifecycles",
+        "dom-timing-sensitive frontend",
+        "frontend behavior",
+        "race conditions",
+        "janky ui",
+        "ui failure",
+        "failure modes",
+        "julik frontend races"
+      ],
+      "persona": "ce-julik-frontend-races-reviewer",
+      "phrasing": "The prompt looks julik-frontend-races-reviewer-flavored. Consider running `/ce-lite:ce-ask-julik-frontend-races-reviewer` for a focused review by the julik-frontend-races-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "kieran's strict",
+        "strict bar",
+        "pythonic clarity",
+        "clarity type",
+        "type hints",
+        "kieran python",
+        "python",
+        "kieran's",
+        "strict",
+        "pythonic"
+      ],
+      "persona": "ce-kieran-python-reviewer",
+      "phrasing": "The prompt looks kieran-python-reviewer-flavored. Consider running `/ce-lite:ce-ask-kieran-python-reviewer` for a focused review by the kieran-python-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "rails application",
+        "kieran's strict",
+        "strict bar",
+        "clarity conventions",
+        "kieran rails",
+        "kieran rail",
+        "application",
+        "kieran's",
+        "strict",
+        "clarity"
+      ],
+      "persona": "ce-kieran-rails-reviewer",
+      "phrasing": "The prompt looks kieran-rails-reviewer-flavored. Consider running `/ce-lite:ce-ask-kieran-rails-reviewer` for a focused review by the kieran-rails-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "kieran's strict",
+        "strict bar",
+        "type safety",
+        "safety clarity",
+        "kieran typescript",
+        "typescript",
+        "kieran's",
+        "strict",
+        "safety",
+        "clarity"
+      ],
+      "persona": "ce-kieran-typescript-reviewer",
+      "phrasing": "The prompt looks kieran-typescript-reviewer-flavored. Consider running `/ce-lite:ce-ask-kieran-typescript-reviewer` for a focused review by the kieran-typescript-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "searches docs",
+        "docs solutions",
+        "learnings via",
+        "via frontmatter",
+        "frontmatter metadata",
+        "metadata bugs",
+        "bugs architecture",
+        "architecture design",
+        "design patterns",
+        "patterns conventions"
+      ],
+      "persona": "ce-learnings-researcher",
+      "phrasing": "The prompt looks learnings-researcher-flavored. Consider running `/ce-lite:ce-ask-learnings-researcher` for a focused review by the learnings-researcher specialist."
+    },
+    {
+      "keywords": [
+        "premature abstraction",
+        "abstraction unnecessary",
+        "unnecessary indirection",
+        "indirection dead",
+        "unrelated modules",
+        "obscures intent",
+        "maintainability",
+        "always-on",
+        "premature",
+        "abstraction"
+      ],
+      "persona": "ce-maintainability-reviewer",
+      "phrasing": "The prompt looks maintainability-reviewer-flavored. Consider running `/ce-lite:ce-ask-maintainability-reviewer` for a focused review by the maintainability-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "naming consistency",
+        "convention drift",
+        "style consistency",
+        "naming pattern",
+        "matches existing",
+        "consistent with",
+        "follow the pattern"
+      ],
+      "persona": "ce-pattern-recognition-specialist",
+      "phrasing": "Pattern/consistency review may help. Consider `/ce-lite:ce-ask-pattern-recognition-specialist` to surface duplication and convention drift."
+    },
+    {
+      "keywords": [
+        "performance",
+        "latency",
+        "bottleneck",
+        "slow query",
+        "N+1",
+        "p99",
+        "throughput",
+        "memory pressure"
+      ],
+      "persona": "ce-performance-oracle",
+      "phrasing": "Performance angle visible. Consider `/ce-lite:ce-ask-performance-oracle` for a structured performance review."
+    },
+    {
+      "keywords": [
+        "database queries",
+        "queries loop-heavy",
+        "loop-heavy data",
+        "data transforms",
+        "transforms caching",
+        "caching layers",
+        "o-intensive paths",
+        "runtime performance",
+        "scalability issues",
+        "performance"
+      ],
+      "persona": "ce-performance-reviewer",
+      "phrasing": "The prompt looks performance-reviewer-flavored. Consider running `/ce-lite:ce-ask-performance-reviewer` for a focused review by the performance-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "resolves one",
+        "related pr",
+        "threads assesses",
+        "assesses validity",
+        "validity implements",
+        "returns structured",
+        "structured summaries",
+        "reply text",
+        "text spawned",
+        "resolve-pr-feedback skill"
+      ],
+      "persona": "ce-pr-comment-resolver",
+      "phrasing": "The prompt looks pr-comment-resolver-flavored. Consider running `/ce-lite:ce-ask-pr-comment-resolver` for a focused review by the pr-comment-resolver specialist."
+    },
+    {
+      "keywords": [
+        "whether prior",
+        "prior feedback",
+        "been addressed",
+        "previous comments",
+        "previous comment",
+        "existing",
+        "comments",
+        "threads",
+        "whether",
+        "feedback"
+      ],
+      "persona": "ce-previous-comments-reviewer",
+      "phrasing": "The prompt looks previous-comments-reviewer-flavored. Consider running `/ce-lite:ce-ask-previous-comments-reviewer` for a focused review by the previous-comments-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "planning documents",
+        "senior product",
+        "product leader",
+        "leader challenges",
+        "challenges premise",
+        "premise claims",
+        "claims assesses",
+        "assesses strategic",
+        "strategic consequences",
+        "consequences trajectory"
+      ],
+      "persona": "ce-product-lens-reviewer",
+      "phrasing": "The prompt looks product-lens-reviewer-flavored. Consider running `/ce-lite:ce-ask-product-lens-reviewer` for a focused review by the product-lens-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "project's own",
+        "own CLAUDE",
+        "CLAUDE md",
+        "AGENTS md",
+        "md standards",
+        "standards frontmatter",
+        "frontmatter rules",
+        "rules reference",
+        "reference inclusion",
+        "inclusion naming"
+      ],
+      "persona": "ce-project-standards-reviewer",
+      "phrasing": "The prompt looks project-standards-reviewer-flavored. Consider running `/ce-lite:ce-ask-project-standards-reviewer` for a focused review by the project-standards-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "error handling",
+        "handling retries",
+        "retries circuit",
+        "circuit breakers",
+        "breakers timeouts",
+        "timeouts health",
+        "background jobs",
+        "async handlers",
+        "production reliability",
+        "failure modes"
+      ],
+      "persona": "ce-reliability-reviewer",
+      "phrasing": "The prompt looks reliability-reviewer-flavored. Consider running `/ce-lite:ce-ask-reliability-reviewer` for a focused review by the reliability-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "conducts thorough",
+        "thorough research",
+        "repository structure",
+        "structure documentation",
+        "documentation conventions",
+        "implementation patterns",
+        "understanding project",
+        "project conventions",
+        "repo research",
+        "conducts"
+      ],
+      "persona": "ce-repo-research-analyst",
+      "phrasing": "The prompt looks repo-research-analyst-flavored. Consider running `/ce-lite:ce-ask-repo-research-analyst` for a focused review by the repo-research-analyst specialist."
+    },
+    {
+      "keywords": [
+        "unrelated schema",
+        "schema rb",
+        "cross-referencing against",
+        "against included",
+        "included migrations",
+        "database schema",
+        "schema drift",
+        "unrelated",
+        "schema",
+        "cross-referencing"
+      ],
+      "persona": "ce-schema-drift-detector",
+      "phrasing": "The prompt looks schema-drift-detector-flavored. Consider running `/ce-lite:ce-ask-schema-drift-detector` for a focused review by the schema-drift-detector specialist."
+    },
+    {
+      "keywords": [
+        "planning documents",
+        "scope alignment",
+        "unjustified complexity",
+        "complexity challenges",
+        "challenges unnecessary",
+        "unnecessary abstractions",
+        "abstractions premature",
+        "premature frameworks",
+        "exceeds stated",
+        "stated goals"
+      ],
+      "persona": "ce-scope-guardian-reviewer",
+      "phrasing": "The prompt looks scope-guardian-reviewer-flavored. Consider running `/ce-lite:ce-ask-scope-guardian-reviewer` for a focused review by the scope-guardian-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "planning documents",
+        "security gaps",
+        "plan level",
+        "level auth",
+        "auth authz",
+        "authz assumptions",
+        "assumptions data",
+        "data exposure",
+        "exposure risks",
+        "risks API"
+      ],
+      "persona": "ce-security-lens-reviewer",
+      "phrasing": "The prompt looks security-lens-reviewer-flavored. Consider running `/ce-lite:ce-ask-security-lens-reviewer` for a focused review by the security-lens-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "auth middleware",
+        "middleware public",
+        "public endpoints",
+        "endpoints user",
+        "user input",
+        "input handling",
+        "exploitable vulnerabilities",
+        "security",
+        "middleware",
+        "public"
+      ],
+      "persona": "ce-security-reviewer",
+      "phrasing": "The prompt looks security-reviewer-flavored. Consider running `/ce-lite:ce-ask-security-reviewer` for a focused review by the security-reviewer specialist."
+    },
+    {
+      "keywords": [
         "security",
         "vuln",
         "vulnerab",
@@ -40,81 +710,99 @@
     },
     {
       "keywords": [
-        "factor out",
-        "extract method",
-        "extract class",
-        "duplicat",
-        "copy-pasted",
-        "DRY",
-        "coupling",
-        "abstraction",
-        "boundaries",
-        "structural refactor",
-        "service boundaries",
-        "module bound",
-        "pattern compliance",
-        "design integrity"
+        "synthesizes findings",
+        "prior coding-agent",
+        "coding-agent sessions",
+        "sessions about",
+        "topic receives",
+        "receives pre-extracted",
+        "pre-extracted skeleton",
+        "skeleton error",
+        "error file",
+        "file paths"
       ],
-      "persona": "ce-architecture-strategist",
-      "phrasing": "Architecture/design concerns visible. Consider `/ce-lite:ce-ask-architecture-strategist` for a structural review (pattern compliance, layer violations, naming consistency)."
+      "persona": "ce-session-historian",
+      "phrasing": "The prompt looks session-historian-flavored. Consider running `/ce-lite:ce-ask-session-historian` for a focused review by the session-historian specialist."
     },
     {
       "keywords": [
-        "YAGNI",
-        "over-engineered",
-        "premature abstraction",
-        "redundant abstraction",
-        "simplify",
-        "simpler way",
-        "is this too clever",
-        "unnecessary indirection",
-        "feels overcomplicated",
-        "could this be simpler"
+        "searches slack",
+        "organizational context",
+        "context decisions",
+        "decisions constraints",
+        "documented elsewhere",
+        "user explicitly",
+        "explicitly asks",
+        "search slack",
+        "ideation planning",
+        "slack"
       ],
-      "persona": "ce-code-simplicity-reviewer",
-      "phrasing": "Simplicity concerns visible. Consider `/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/redundancy review."
+      "persona": "ce-slack-researcher",
+      "phrasing": "The prompt looks slack-researcher-flavored. Consider running `/ce-lite:ce-ask-slack-researcher` for a focused review by the slack-researcher specialist."
     },
     {
       "keywords": [
+        "feature descriptions",
+        "user flow",
+        "flow completeness",
+        "gap identification",
+        "spec plan",
+        "feature description",
+        "description needs",
+        "needs flow",
         "edge case",
-        "off-by-one",
-        "race condition",
-        "deadlock",
-        "concurrency bug",
-        "correctness",
-        "logic bug",
-        "is this correct",
-        "boundary condition"
+        "case discovery"
       ],
-      "persona": "ce-correctness-reviewer",
-      "phrasing": "Correctness concerns visible. Consider `/ce-lite:ce-ask-correctness-reviewer` for an edge-case / boundary-condition review."
+      "persona": "ce-spec-flow-analyzer",
+      "phrasing": "The prompt looks spec-flow-analyzer-flavored. Consider running `/ce-lite:ce-ask-spec-flow-analyzer` for a focused review by the spec-flow-analyzer specialist."
     },
     {
       "keywords": [
-        "naming consistency",
-        "convention drift",
-        "style consistency",
-        "naming pattern",
-        "matches existing",
-        "consistent with",
-        "follow the pattern"
+        "swift files",
+        "files swiftui",
+        "swiftui uikit",
+        "uikit views",
+        "views ios",
+        "ios entitlements",
+        "entitlements privacy",
+        "privacy manifests",
+        "manifests core",
+        "core data"
       ],
-      "persona": "ce-pattern-recognition-specialist",
-      "phrasing": "Pattern/consistency review may help. Consider `/ce-lite:ce-ask-pattern-recognition-specialist` to surface duplication and convention drift."
+      "persona": "ce-swift-ios-reviewer",
+      "phrasing": "The prompt looks swift-ios-reviewer-flavored. Consider running `/ce-lite:ce-ask-swift-ios-reviewer` for a focused review by the swift-ios-reviewer specialist."
     },
     {
       "keywords": [
-        "performance",
-        "latency",
-        "bottleneck",
-        "slow query",
-        "N+1",
-        "p99",
-        "throughput",
-        "memory pressure"
+        "test coverage",
+        "coverage gaps",
+        "gaps weak",
+        "weak assertions",
+        "assertions brittle",
+        "brittle implementation-coupled",
+        "implementation-coupled tests",
+        "missing edge",
+        "edge case",
+        "case coverage"
       ],
-      "persona": "ce-performance-oracle",
-      "phrasing": "Performance angle visible. Consider `/ce-lite:ce-ask-performance-oracle` for a structured performance review."
+      "persona": "ce-testing-reviewer",
+      "phrasing": "The prompt looks testing-reviewer-flavored. Consider running `/ce-lite:ce-ask-testing-reviewer` for a focused review by the testing-reviewer specialist."
+    },
+    {
+      "keywords": [
+        "performs iterative",
+        "iterative web",
+        "web research",
+        "returns structured",
+        "structured external",
+        "external grounding",
+        "ideating outside",
+        "codebase validating",
+        "validating prior",
+        "prior art"
+      ],
+      "persona": "ce-web-researcher",
+      "phrasing": "The prompt looks web-researcher-flavored. Consider running `/ce-lite:ce-ask-web-researcher` for a focused review by the web-researcher specialist."
     }
   ]
 }

@@ -77,6 +77,11 @@
                   fileset = pkgs.lib.fileset.unions [
                     ./converter
                     ./tests
+                    # The hook-rules test reads the live persona manifest to
+                    # check Pass A coverage (one rule per persona). Adding
+                    # just the manifest avoids pulling all of dist/ into the
+                    # test sandbox.
+                    ./dist/references/agent-prompts/manifest.json
                   ];
                 };
               in
