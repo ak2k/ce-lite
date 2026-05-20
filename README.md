@@ -28,6 +28,27 @@ During trial, slash commands are namespaced under `/ce-lite:*` so the original `
 | Proactive specialist invocation | ✅ Any conversation can pull `security-sentinel` | ❌ Specialists only fire via `/ce-lite:review` |
 | Maintenance | Anthropic / EveryInc | Auto-regenerated daily from upstream by GH Action |
 
+### Caveat: tool restrictions are advisory
+
+Each persona declares a `tools: [Read, Grep, ...]` set in the upstream
+manifest. In upstream CE these are enforced by the harness — Claude
+Code refuses to grant a non-listed tool to that agent type. In ce-lite,
+dispatch happens via `subagent_type: "general-purpose"` (because
+ce-lite intentionally ships zero persistent agent registrations to
+preserve the idle-context savings), and the harness can't enforce the
+manifest's `tools` field on a general-purpose subagent. The
+[ce-persona=NAME via=SOURCE] preamble emitted by the resolver tells the
+sub-agent to self-police, but it's advisory — strong agents honor it,
+the rule isn't bulletproof.
+
+This matches [Anthropic's 2026 platform position on `allowed-tools` in
+SKILL.md frontmatter](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+(also advisory). If you need hard enforcement for a specific persona,
+add a [`PreToolUse`
+hook](https://code.claude.com/docs/en/hooks#pretooluse) that rejects
+tool calls outside the manifest's set — runs at trigger time, not into
+idle context, so it doesn't reverse the ce-lite trade-off.
+
 ## Build pipeline
 
 1. **`converter/extract.py`** — read `agents/*.agent.md` from upstream CE, relocate bodies to `dist/references/agent-prompts/<name>.md`, build `manifest.json`, copy non-agent files (`skills/`, `.claude-plugin/`, etc.) through.
