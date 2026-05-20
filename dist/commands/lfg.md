@@ -1,5 +1,5 @@
 ---
-description: "Run the full autonomous engineering pipeline end-to-end (plan, work, code review, test, commit, push, open PR, watch CI, fix CI failures..."
+description: "lfg"
 argument-hint: "[feature description]"
 ---
 

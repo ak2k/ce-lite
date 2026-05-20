@@ -1,5 +1,5 @@
 ---
-description: "[BETA] Start the dev server, open the feature in a browser, and iterate on improvements together."
+description: "ce-polish-beta"
 argument-hint: "[PR number, branch name, or blank for current branch]"
 ---
 

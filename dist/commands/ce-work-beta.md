@@ -1,5 +1,5 @@
 ---
-description: "[BETA] Execute work with external delegate support."
+description: "ce-work-beta"
 argument-hint: "[Plan doc path or description of work. Blank to auto use latest plan doc] [delegate:codex]"
 ---
 

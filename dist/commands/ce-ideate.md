@@ -1,5 +1,5 @@
 ---
-description: "Generate and critically evaluate grounded ideas about a topic."
+description: "ce-ideate"
 argument-hint: "[feature, focus area, or constraint]"
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Build and test iOS apps on simulator using XcodeBuildMCP."
+description: "ce-test-xcode"
 argument-hint: "[scheme name or 'current' to use default]"
 ---
 

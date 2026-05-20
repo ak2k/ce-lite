@@ -1,5 +1,5 @@
 ---
-description: "Create structured plans for multi-step tasks -- software features, research workflows, events, study plans, or any goal that benefits fro..."
+description: "ce-plan"
 argument-hint: "[optional: feature description, requirements doc path, plan path to deepen, or any task to plan]"
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Document a recently solved problem to compound your team's knowledge"
+description: "ce-compound"
 argument-hint: "[optional: brief context] [mode:headless] "
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Systematically find root causes and fix bugs."
+description: "ce-debug"
 argument-hint: "[issue reference, error message, test path, or description of broken behavior]"
 ---
 

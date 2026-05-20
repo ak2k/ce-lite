@@ -1,5 +1,5 @@
 ---
-description: "Run browser tests on pages affected by current PR or branch"
+description: "ce-test-browser"
 argument-hint: "[PR number, branch name, 'current', or --port PORT]"
 ---
 

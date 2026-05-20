@@ -1,5 +1,5 @@
 ---
-description: "Resolve PR review feedback by evaluating validity and fixing issues in parallel."
+description: "ce-resolve-pr-feedback"
 argument-hint: "[PR number, comment URL, or blank for current branch's PR]"
 ---
 

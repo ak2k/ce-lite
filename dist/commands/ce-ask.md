@@ -1,5 +1,5 @@
 ---
-description: "Discover and dispatch ce-lite specialist personas via a single slash command."
+description: "ce-ask"
 argument-hint: "[persona-name [task context]]"
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Execute work efficiently while maintaining quality and finishing features"
+description: "ce-work"
 argument-hint: "[Plan doc path or description of work. Blank to auto use latest plan doc]"
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Generate a time-windowed pulse report on what users experienced and how the product performed - usage, quality, errors, signals worth inv..."
+description: "ce-product-pulse"
 argument-hint: "[lookback window, e.g. '24h', '7d', '1h'; default 24h]"
 ---
 

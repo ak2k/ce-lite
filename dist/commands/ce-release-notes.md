@@ -1,5 +1,5 @@
 ---
-description: "Summarize recent compound-engineering plugin releases, or answer a specific question about a past release with a version citation."
+description: "ce-release-notes"
 argument-hint: "[optional: question about a past release]"
 ---
 

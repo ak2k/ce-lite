@@ -1,5 +1,5 @@
 ---
-description: "Create or maintain STRATEGY.md - the product's target problem, approach, users, key metrics, and tracks of work."
+description: "ce-strategy"
 argument-hint: "[optional: section to revisit, e.g. 'metrics' or 'approach']"
 ---
 
