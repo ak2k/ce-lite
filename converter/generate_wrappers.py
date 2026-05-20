@@ -587,20 +587,27 @@ def _compute_too_generic(descriptions: list[str], threshold: float = 0.20) -> se
     return {w for w, c in df.items() if c / n > threshold}
 
 
+_CLAUSE_SPLIT_RE = re.compile(r"[.,;:!?]+|—|–")
+
+
 def _consecutive_bigrams(text: str, drop: set[str]) -> list[str]:
     """Extract bigrams of two adjacent content words from the original text.
 
-    Walks tokens in their original positions; emits "tok_a tok_b" when
-    both survive the stopword/generic filter AND they're adjacent (no
-    intervening dropped token). Higher precision than singletons:
-    "data migration" fires on the phrase; "data" alone fires on any
-    DB-related prompt.
+    Respects clause boundaries (period, comma, semicolon, colon, em/en-dash):
+    "test coverage gaps, weak assertions" produces "test coverage" and
+    "weak assertions" — never the cross-clause "gaps weak". Hyphens are
+    kept inside tokens by _tokenize so compound words ("agent-native",
+    "off-by-one") survive intact.
+
+    Higher precision than singletons: "data migration" fires on the
+    phrase; "data" alone fires on any DB-related prompt.
     """
-    tokens = _tokenize(text)
     out: list[str] = []
-    for a, b in zip(tokens, tokens[1:]):
-        if a not in drop and b not in drop:
-            out.append(f"{a} {b}")
+    for chunk in _CLAUSE_SPLIT_RE.split(text):
+        tokens = _tokenize(chunk)
+        for a, b in zip(tokens, tokens[1:]):
+            if a not in drop and b not in drop:
+                out.append(f"{a} {b}")
     return out
 
 

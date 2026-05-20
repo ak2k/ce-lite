@@ -1,0 +1,43 @@
+# Pass B overrides for wrapper SKILL.md description fields.
+#
+# Format: persona-name: <new description string>
+#
+# Used by converter/generate_wrappers.py via load_overrides(). When an
+# entry exists for a persona, the override replaces what Pass A would
+# derive from the upstream manifest description.
+#
+# Lead with the trigger phrase ("Use when ...") per 2026 community
+# consensus (ofox.ai, Anthropic skill best-practices). Description-only
+# routing fires at ~20% baseline; trigger-phrase-leading descriptions
+# measurably lift that. Side benefit: the new descriptions feed into Pass
+# A keyword derivation (see converter/generate_wrappers.py
+# derive_keyword_rule) so triggering quality for these personas improves
+# in both layers — description match AND keyword match.
+#
+# The four entries below replace the original "Always-on code-review
+# persona. Reviews code for X, Y, Z." pattern. Same content; the trigger
+# phrase moves to the front.
+
+ce-correctness-reviewer: >
+  Use when reviewing code changes for logic errors, edge cases,
+  state-management bugs, error-propagation failures, or
+  intent-vs-implementation mismatches. Always-on persona — surface
+  concerns without waiting for an explicit invocation.
+
+ce-maintainability-reviewer: >
+  Use when reviewing code changes for premature abstraction, unnecessary
+  indirection, dead code, coupling between unrelated modules, or naming
+  that obscures intent. Always-on persona — surface maintainability
+  concerns without waiting for an explicit invocation.
+
+ce-project-standards-reviewer: >
+  Use when reviewing code changes for adherence to project conventions
+  (CLAUDE.md / AGENTS.md standards, frontmatter rules, reference-inclusion
+  patterns, naming conventions, cross-platform portability, tool-selection
+  policies). Always-on persona.
+
+ce-testing-reviewer: >
+  Use when reviewing code changes for test-coverage gaps, weak assertions,
+  brittle implementation-coupled tests, or missing edge-case coverage.
+  Always-on persona — surface testing concerns without waiting for an
+  explicit invocation.
