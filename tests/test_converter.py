@@ -875,3 +875,224 @@ def test_hook_runtime_keyword_match_short_circuits_haiku():
     response = _json.loads(out)
     assert "KEYWORD_PATH_MARKER" in response["hookSpecificOutput"]["additionalContext"]
     assert elapsed < 2.0, f"keyword-match took {elapsed:.1f}s — Haiku may have been called"
+
+
+# -------- bin/ce-lite-persona resolver shim (Phase B.9) --------
+#
+# The resolver replaces per-skill Glob/find discovery scaffolding. Wrappers
+# and orchestrator preambles both invoke `ce-lite-persona <name> --body`
+# instead of embedding ~500 tokens of discovery prose. These tests cover
+# both the rendered source (string assertions on the template) AND live
+# runtime behaviour (write the script to a tmpdir with a fake manifest and
+# exercise it).
+
+from generate_wrappers import render_persona_resolver  # noqa: E402
+
+
+def test_resolver_has_shebang():
+    src = render_persona_resolver()
+    assert src.startswith("#!/usr/bin/env python3")
+
+
+def test_resolver_is_stdlib_only():
+    """Hooks ship stdlib-only too — same constraint applies."""
+    src = render_persona_resolver()
+    forbidden = ["import yaml", "import requests", "from anthropic", "import anthropic"]
+    for f in forbidden:
+        assert f not in src, f"resolver imports {f!r} — must be stdlib-only"
+
+
+def test_resolver_honours_claude_plugin_root_env():
+    """${CLAUDE_PLUGIN_ROOT} is the canonical plugin-root reference; resolver
+    must prefer it when set so hook-spawned subprocesses don't re-walk."""
+    src = render_persona_resolver()
+    assert "CLAUDE_PLUGIN_ROOT" in src
+
+
+def test_resolver_walks_up_as_fallback():
+    """When the env var isn't set (model's Bash environment outside a skill
+    context), the resolver walks up from its own location."""
+    src = render_persona_resolver()
+    assert "__file__" in src
+    assert ".claude-plugin" in src
+
+
+def test_resolver_advertises_subcommands_in_docstring():
+    """Discoverability — `--help` should surface the same flags the SKILL.md
+    bodies reference, so a future converter regen can't silently drift."""
+    src = render_persona_resolver()
+    for flag in ["--body", "--path", "--list", "--diagnose"]:
+        assert flag in src, f"resolver source missing flag advertisement: {flag}"
+
+
+def _run_resolver(tmp: Path, args: list[str], extra_env: dict | None = None) -> tuple[int, str, str]:
+    """Write resolver to a tmpdir with a fake manifest + prompt and invoke it."""
+    import subprocess as _subp
+
+    plugin_root = tmp / "plugin"
+    first_call = not plugin_root.exists()
+    (plugin_root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+    (plugin_root / ".claude-plugin" / "plugin.json").write_text('{"name":"x","version":"1"}')
+    prompts_dir = plugin_root / "references" / "agent-prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    if first_call:
+        # Subsequent calls within the same test (e.g. simulating "prompt
+        # deleted after install") must NOT re-bootstrap the fixture.
+        (prompts_dir / "ce-security-sentinel.md").write_text("security persona body\n")
+    if first_call:
+        manifest = {
+            "schema_version": 1,
+            "agent_count": 1,
+            "agents": [
+                {
+                    "name": "ce-security-sentinel",
+                    "description": "Use when reviewing security.",
+                    "model": "inherit",
+                    "tools": ["Read", "Grep"],
+                    "prompt_path": "references/agent-prompts/ce-security-sentinel.md",
+                }
+            ],
+        }
+        (prompts_dir / "manifest.json").write_text(_json.dumps(manifest))
+
+    bin_dir = plugin_root / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    resolver = bin_dir / "ce-lite-persona"
+    resolver.write_text(render_persona_resolver(), encoding="utf-8")
+    resolver.chmod(0o755)
+
+    env = {**os.environ}
+    if extra_env:
+        env.update(extra_env)
+    proc = _subp.run(
+        ["python3", str(resolver), *args],
+        capture_output=True, text=True, env=env, timeout=10,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+# os import for _run_resolver
+import os  # noqa: E402
+
+
+def test_resolver_runtime_body_returns_prompt_contents(tmp_path: Path):
+    rc, out, err = _run_resolver(tmp_path, ["ce-security-sentinel", "--body"])
+    assert rc == 0, f"stderr={err!r}"
+    assert out == "security persona body\n"
+
+
+def test_resolver_runtime_path_returns_absolute_path(tmp_path: Path):
+    rc, out, err = _run_resolver(tmp_path, ["ce-security-sentinel", "--path"])
+    assert rc == 0, f"stderr={err!r}"
+    resolved = Path(out.strip())
+    assert resolved.is_absolute()
+    assert resolved.name == "ce-security-sentinel.md"
+
+
+def test_resolver_runtime_accepts_bare_persona_name(tmp_path: Path):
+    """`security-sentinel` resolves to `ce-security-sentinel`."""
+    rc, out, _ = _run_resolver(tmp_path, ["security-sentinel", "--body"])
+    assert rc == 0
+    assert "security persona body" in out
+
+
+def test_resolver_runtime_list_emits_catalog(tmp_path: Path):
+    rc, out, _ = _run_resolver(tmp_path, ["--list"])
+    assert rc == 0
+    assert "ce-security-sentinel\t" in out
+    assert "Use when reviewing security." in out
+
+
+def test_resolver_runtime_diagnose_reports_ok(tmp_path: Path):
+    rc, out, _ = _run_resolver(tmp_path, ["--diagnose"])
+    assert rc == 0
+    assert "personas:    1" in out
+    assert "status:      ok" in out
+
+
+def test_resolver_runtime_unknown_persona_lists_known(tmp_path: Path):
+    rc, out, err = _run_resolver(tmp_path, ["ce-bogus-reviewer", "--body"])
+    assert rc != 0
+    # Error message must list known personas so the caller can correct typos
+    assert "unknown persona" in err.lower()
+    assert "ce-security-sentinel" in err
+    # And NOTHING was written to stdout (callers grep stderr for the reason)
+    assert out == ""
+
+
+def test_resolver_runtime_diagnose_flags_missing_prompts(tmp_path: Path):
+    """Delete a prompt file after install — diagnose must spot it."""
+    rc1, _, _ = _run_resolver(tmp_path, ["--diagnose"])
+    assert rc1 == 0
+    # Remove the prompt file and re-run
+    (tmp_path / "plugin" / "references" / "agent-prompts" / "ce-security-sentinel.md").unlink()
+    rc2, _, err = _run_resolver(tmp_path, ["--diagnose"])
+    assert rc2 != 0
+    assert "ce-security-sentinel" in err
+
+
+def test_resolver_runtime_honours_claude_plugin_root(tmp_path: Path):
+    """When $CLAUDE_PLUGIN_ROOT is set, resolver uses it instead of walking up."""
+    rc, out, _ = _run_resolver(
+        tmp_path,
+        ["ce-security-sentinel", "--body"],
+        extra_env={"CLAUDE_PLUGIN_ROOT": str(tmp_path / "plugin")},
+    )
+    assert rc == 0
+    assert "security persona body" in out
+
+
+# -------- wrapper templates reference the resolver shim --------
+
+
+def test_render_wrapper_invokes_resolver(persona_factory=None):
+    """Wrapper bodies must call ce-lite-persona, not embed Glob/find scaffolding."""
+    from generate_wrappers import Persona, render_wrapper
+    p = Persona(
+        name="ce-security-sentinel",
+        description="Security reviews.",
+        model="inherit",
+        tools=["Read", "Grep"],
+        prompt_path="references/agent-prompts/ce-security-sentinel.md",
+    )
+    out = render_wrapper(p, "Use when reviewing security.")
+    assert "ce-lite-persona ce-security-sentinel" in out
+    # No glob/find scaffolding left over
+    assert ".claude/plugins/cache" not in out
+    assert "find ~/" not in out
+
+
+def test_render_panel_invokes_resolver():
+    """Panel skill must also use the resolver — same dispatch path."""
+    from generate_wrappers import render_panel
+    out = render_panel([])
+    assert "ce-lite-persona" in out
+    assert ".claude/plugins/cache" not in out
+
+
+def test_render_meta_skill_invokes_resolver():
+    """Meta-skill (`/ce-ask`) must use resolver --list and --body."""
+    from generate_wrappers import render_meta_skill
+    out = render_meta_skill()
+    assert "ce-lite-persona --list" in out
+    assert "ce-lite-persona" in out
+    assert ".claude/plugins/cache" not in out
+
+
+def test_rewrite_preamble_references_resolver():
+    """Orchestrator dispatch-protocol preamble must reference the resolver,
+    NOT the legacy Glob/find scaffolding."""
+    from rewrite import PREAMBLE
+    assert "ce-lite-persona" in PREAMBLE
+    assert "general-purpose" in PREAMBLE  # still the default dispatch type
+    # Legacy Glob/find scaffolding must be gone
+    assert ".claude/plugins/cache" not in PREAMBLE
+    assert "find ~/" not in PREAMBLE
+
+
+def test_rewrite_preamble_keeps_meaningful_description_guidance():
+    """The 'general-purpose' trace label is mitigated by a meaningful
+    Agent.description; preamble must teach that pattern."""
+    from rewrite import PREAMBLE
+    assert "description" in PREAMBLE.lower()
+    assert "trace" in PREAMBLE.lower() or "readable" in PREAMBLE.lower()

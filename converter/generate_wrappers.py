@@ -1,4 +1,4 @@
-"""Generate per-persona wrapper skills (Tier 3).
+"""Generate per-persona wrapper skills (Tier 3) + bin/ce-lite-persona resolver.
 
 Each entry in `dist/references/agent-prompts/manifest.json` becomes a thin
 SKILL.md at `dist/skills/ce-ask-<persona>/SKILL.md`. The wrapper restores
@@ -7,6 +7,14 @@ spontaneously suggest `/ce-ask-security-sentinel` when reviewing
 security-sensitive code, without re-paying the persistent-agent
 registration cost (49 agents × ~1.2k tokens = ~58.8k baseline that the
 ce-lite v1 converter strips).
+
+Dispatch lookup is handled by a single small Python shim at
+`dist/bin/ce-lite-persona` (this directory is on PATH because Claude Code
+exports installed-plugin `bin/`). Wrapper SKILL.md bodies — and the
+orchestrator dispatch-protocol preamble injected by `rewrite.py` — just
+invoke `ce-lite-persona <name> --body` instead of carrying ~500 tokens of
+Glob/find discovery scaffolding each. Net: same idle cost (~22 tok per
+wrapper-skill description), lower per-dispatch context cost.
 
 Naming convention: `ce-ask-<persona-bare-name>`. The `ce-` prefix is
 stripped from the agent name before re-prefixing with `ce-ask-` so we
@@ -42,8 +50,8 @@ The wrapper template embeds:
      advisory `tools:` field into loud-advisory inside the dispatched
      prompt (the harness can't enforce because we dispatch via
      general-purpose, but the agent can self-police if explicitly told).
-  4. A missing-prompt-file fallback that reports the rename rather than
-     silently failing.
+  4. An `Agent.description` template — meaningful labels on the dispatch
+     so traces don't read as anonymous "general-purpose" runs.
   5. The canonical persona name in the body (never the wrapper name) so
      Tier 4 migration is a mechanical s/// over wrapper-bodies.
 """
@@ -68,28 +76,14 @@ WRAPPER_GENERATED_MARKER = (
 )
 
 
-# Persona prompts live inside this plugin's install dir, but the install path
-# varies per machine and a bare relative path resolves relative to the user's
-# project (which is wrong). Every dispatch site needs the same discovery
-# protocol — keep it as one canonical block so the four templates stay in sync.
-PROMPT_DISCOVERY_INSTRUCTIONS = """\
-> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
-> path resolves relative to the user's project, which is usually not where
-> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
->
-> ```
-> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
-> ```
->
-> If that pattern returns nothing, fall back to `Bash`:
->
-> ```
-> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
-> ```
->
-> Cache the discovered plugin root (the directory containing
-> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
-> root, so subsequent lookups in this turn don't need to re-glob."""
+# Persona prompts live inside this plugin's install dir. Rather than embed
+# Glob/find discovery scaffolding in every wrapper SKILL.md body (~500 tok
+# of repeated scaffolding per skill), we ship a `bin/ce-lite-persona`
+# resolver. Claude Code exports each installed plugin's `bin/` onto PATH, so
+# dispatch sites can invoke `ce-lite-persona <name> --body` directly in one
+# Bash call. The resolver itself walks up from its own location (or honours
+# $CLAUDE_PLUGIN_ROOT) to find the plugin root; the SKILL.md author doesn't
+# need to know the install path.
 
 
 @dataclass(frozen=True)
@@ -213,56 +207,36 @@ description: {json.dumps(description)}
 
 {WRAPPER_GENERATED_MARKER}
 
-Dispatch the **{persona.name}** specialist by spawning a sub-agent with the
-persona's prompt body as preamble. The persona is one of the lightweight-
-delegation specialists in this plugin; its prompt body lives at
-`{persona.prompt_path}` **inside the plugin's install directory** (NOT the
-user's project — see discovery instructions below).
-
-{PROMPT_DISCOVERY_INSTRUCTIONS}
+Dispatch the **{persona.name}** specialist as a sub-agent.
 
 ## Steps
 
-1. Locate the prompt file via the discovery instructions above. Then read
-   the resolved path (`<plugin-root>/{persona.prompt_path}`) for the
-   persona's full role definition.
-2. Spawn a new agent with `subagent_type: "general-purpose"` (the harness's
-   default fan-out type — persistent registrations were stripped to keep this
-   plugin's idle context cost low). Prepend the following preamble to the
-   prompt before the user-supplied task context:
+1. Run `ce-lite-persona {persona.name} --body` via Bash. The resolver is on
+   PATH (this plugin's `bin/` is exported by Claude Code) and prints the
+   persona's full role prompt to stdout. On non-zero exit, the resolver's
+   stderr explains the cause (unknown persona, missing prompt file, plugin
+   not installed) — surface it and stop. Do not silently fall back to a
+   different persona.
+
+2. Spawn an `Agent` with `subagent_type: "general-purpose"` and
+   `description: "{persona.name}: <one-line task summary>"` so traces stay
+   readable. The prompt is the resolver output followed by this preamble
+   and then the user-supplied task ($ARGUMENTS):
 
    ```
    [ce-persona={persona.name} via=ce-ask-direct]
 
-   You are operating as the {persona.name} specialist. Your role is defined
-   in the prompt body above. Manifest declares this role uses
-   tools=[{tools_str}] and model={persona.model}. Honour those constraints:
-   if a task pulls you toward tools outside that set, stop and explain why
-   your role requires it — don't silently broaden scope.
+   You are operating as the {persona.name} specialist. Manifest declares
+   this role uses tools=[{tools_str}] and model={persona.model}. Honour
+   those constraints: if a task pulls you toward tools outside that set,
+   stop and explain why your role requires it — don't silently broaden
+   scope.
    ```
 
-3. Pass the user-supplied task context after the preamble.
+For a parallel multi-persona dispatch, see `/ce-ask-panel`.
 
-## Missing-prompt fallback
-
-If the discovery step returns no plugin root, OR the resolved
-`<plugin-root>/{persona.prompt_path}` does not exist (upstream rename,
-partial install), report:
-
-> Persona `{persona.name}` not found in this plugin's manifest. The plugin
-> may not be installed, may have been partially installed, or the persona
-> may have been renamed upstream. Re-install the plugin or regenerate the
-> converter dist.
-
-Do **not** silently fall back to a different persona — the user explicitly
-named this specialist.
-
-## Notes
-
-- Trace tag `[ce-persona={persona.name} via=ce-ask-direct]` is inline debug
-  metadata. `grep` transcripts when investigating routing or behaviour
-  questions; no systematic collection.
-- For a multi-persona panel, see `/ce-ask-panel`.
+Trace tag `[ce-persona={persona.name} via=ce-ask-direct]` is inline debug
+metadata; `grep` transcripts when investigating routing questions.
 """
 
 
@@ -287,9 +261,10 @@ def render_panel(personas: list[Persona]) -> str:
     """Render the ce-ask-panel meta-skill body.
 
     Static template — same regardless of which personas exist; the runtime
-    validates against the live manifest. Listing personas at generation time
-    would force regeneration on every upstream tag bump just to update a list
-    Claude can read from manifest.json directly.
+    validates against the live manifest via the ce-lite-persona resolver.
+    Listing personas at generation time would force regeneration on every
+    upstream tag bump just to update a list Claude can read from
+    manifest.json directly.
     """
     return f"""\
 ---
@@ -314,52 +289,44 @@ Persona names are the **canonical** names from the plugin's persona manifest
 (e.g. `ce-security-sentinel`, `ce-architecture-strategist`), NOT the
 `ce-ask-*` wrapper names.
 
-{PROMPT_DISCOVERY_INSTRUCTIONS}
-
 ## Steps
 
 1. Parse the first whitespace-delimited token as a comma-separated persona
-   list. Trim each name. Treat the rest of the input as the user's task
-   context.
-2. Locate the plugin root via the discovery instructions above and read
-   `<plugin-root>/references/agent-prompts/manifest.json`. Validate each
-   named persona is in `agents[].name`. If any are unknown:
+   list (trim each name). Treat the rest as the user's task context.
 
-   > Unknown persona(s): `<list>`. Known personas: `<list-from-manifest>`.
-   > Use the canonical names (e.g. `ce-security-sentinel`), not wrapper
-   > names (`ce-ask-security-sentinel`).
+2. Validate each persona by running `ce-lite-persona <name> --path` via
+   Bash. Non-zero exit means an unknown persona — the resolver's stderr
+   lists all known personas. Surface that to the user and stop without
+   dispatching anything; partial dispatches confuse merged output.
 
-   Stop without dispatching anything — partial dispatches confuse the
-   merged output.
-3. For each validated persona, dispatch in parallel:
-   - Read its prompt body from
-     `<plugin-root>/references/agent-prompts/<persona>.md`.
-   - Spawn an agent with `subagent_type: "general-purpose"`.
-   - Prepend a preamble of the form:
+3. For each validated persona, dispatch in parallel via `Agent` with
+   `subagent_type: "general-purpose"` and
+   `description: "<persona>: <task summary>"` (meaningful trace label).
+   The prompt is `ce-lite-persona <persona> --body` output followed by:
 
-     ```
-     [ce-persona=<persona> via=ce-ask-panel]
+   ```
+   [ce-persona=<persona> via=ce-ask-panel]
 
-     You are operating as the <persona> specialist. Your role is defined in
-     the prompt body above. Honour the manifest's tools/model constraints
-     for this role; if a task pulls you toward tools outside that set, stop
-     and explain why your role requires it.
-     ```
+   You are operating as the <persona> specialist. Honour the manifest's
+   tools/model constraints for this role; if a task pulls you toward tools
+   outside that set, stop and explain why your role requires it.
+   ```
 
-   - Then the user-supplied task context.
-4. Wait for all to complete. Merge into a single response, grouping by
-   persona with section headers (`## <persona> findings`). Preserve each
-   persona's structured output rather than collapsing into prose.
+   Then a blank line and the user-supplied task context.
+
+4. Wait for all dispatches to complete. Merge into one response, grouping
+   by persona with section headers (`## <persona> findings`). Preserve each
+   persona's structured output — don't collapse into prose.
 
 ## Notes
 
 - Trace tag `via=ce-ask-panel` distinguishes panel dispatch from direct
   invocation (`via=ce-ask-direct`) when grepping transcripts.
-- For one persona, prefer `/ce-ask-<persona-bare-name>` — slightly cheaper
-  than going through the panel parser.
-- For all-personas-pertinent reviews of code or documents, prefer the
-  orchestrator skills (`/ce-code-review`, `/ce-doc-review`) which include
-  conditional persona selection logic.
+- For one persona, prefer `/ce-ask-<persona-bare-name>` — cheaper than
+  going through the panel parser.
+- For full-pipeline reviews, prefer the orchestrator skills
+  (`/ce-code-review`, `/ce-doc-review`) which include conditional persona
+  selection.
 """
 
 
@@ -509,7 +476,7 @@ argument-hint: "[persona-name [task context]]"
 
 {WRAPPER_GENERATED_MARKER}
 
-The single discoverable entry point to ce-lite specialist personas. Three modes
+Single discoverable entry point to ce-lite specialist personas. Three modes
 based on argument shape.
 
 ## Usage
@@ -518,49 +485,43 @@ based on argument shape.
 - `/ce-ask <persona>` — show one persona's full role definition.
 - `/ce-ask <persona> <task>` — dispatch that persona on the task.
 
-Persona names are the canonical names from this plugin's persona manifest
-(e.g. `ce-security-sentinel`, `ce-architecture-strategist`). Argument
-parsing: first whitespace-delimited token is the persona name; everything
-after is the task context.
-
-{PROMPT_DISCOVERY_INSTRUCTIONS}
+Persona names are the canonical names from the manifest (e.g.
+`ce-security-sentinel`). Argument parsing: first whitespace-delimited token
+is the persona name; everything after is the task context.
 
 ## Steps
 
-1. **No args** — locate the plugin root via discovery instructions above,
-   read `<plugin-root>/references/agent-prompts/manifest.json`, and print
-   one line per `agents[*]` entry: `<name> — <description>`. Group loosely
-   by role family (review, document, design, etc.) if helpful. Stop.
+1. **No args** — run `ce-lite-persona --list` via Bash and present the
+   output (one persona per line, `<name><TAB><description>`). The resolver
+   reads the manifest at runtime; no regeneration is needed when upstream
+   adds or removes personas. Stop.
 
-2. **Persona name only** — validate against `manifest.json`. If unknown:
-   > Persona `<name>` not in the catalog. Run `/ce-ask` (no args) to see all
-   > available personas.
-   If known, read `<plugin-root>/references/agent-prompts/<name>.md` and
-   present the persona's role definition along with manifest metadata
-   (tools, model). Stop.
+2. **Persona name only** — run `ce-lite-persona <name> --body` and present
+   the role definition. Non-zero exit means an unknown persona; surface the
+   resolver's stderr (it lists known names) and stop.
 
-3. **Persona name + task** — dispatch via the `Agent` tool with
-   `subagent_type: "general-purpose"`. Prepend this preamble to the persona's
-   prompt body, then append the user's task context:
+3. **Persona name + task** — dispatch via `Agent` with
+   `subagent_type: "general-purpose"` and
+   `description: "<persona>: <task summary>"` (meaningful trace label).
+   The prompt is `ce-lite-persona <persona> --body` output followed by:
 
    ```
    [ce-persona=<persona> via=ce-ask-meta]
 
-   You are operating as the <persona> specialist. Your role is defined in the
-   prompt body above. Manifest declares this role uses
-   tools=[<tools-from-manifest>] and model=<model>. Honour those constraints:
-   if a task pulls you toward tools outside that set, stop and explain why
-   your role requires it — don't silently broaden scope.
+   You are operating as the <persona> specialist. Honour the manifest's
+   tools/model constraints; if a task pulls you toward tools outside that
+   set, stop and explain why your role requires it.
    ```
+
+   Then a blank line and the user task.
 
 ## Notes
 
 - Tab-complete-friendly explicit invocation: `/ce-ask-<persona-name>` (one
-  per persona, generated alongside this meta-skill).
+  per persona).
 - Parallel multi-persona dispatch: `/ce-ask-panel <a>,<b>,<c> <task>`.
-- Autonomous specialist consultation: the harness invokes the
-  `ce-specialist` registered agent directly via `Task` when reviewing
-  warrants a specialist perspective; that path doesn't go through this skill.
+- The catalog is read from `manifest.json` at runtime via the resolver, so
+  this skill body doesn't need regeneration when the persona list changes.
 """
 
 
@@ -570,6 +531,204 @@ def write_meta_skill(dist: Path) -> Path:
     skill_path = skill_dir / "SKILL.md"
     skill_path.write_text(render_meta_skill(), encoding="utf-8")
     return skill_path
+
+
+# ---- bin/ce-lite-persona resolver shim ----
+#
+# Skills can't enumerate the plugin install path declaratively. Claude Code
+# exports each installed plugin's `bin/` onto PATH, so we ship a tiny stdlib-
+# only Python script there: SKILL.md bodies just call
+# `ce-lite-persona <name> --body` in one Bash invocation instead of carrying
+# Glob/find scaffolding. The resolver walks up from its own location (or
+# honours $CLAUDE_PLUGIN_ROOT, which is set in hook subprocesses) to find
+# the plugin root, validates against manifest.json, and prints the prompt
+# path or body. Errors land on stderr with non-zero exit and a one-line
+# `ce-lite-persona: <reason>` prefix.
+
+
+def render_persona_resolver() -> str:
+    """Emit dist/bin/ce-lite-persona — the dispatch resolver shim."""
+    return '''#!/usr/bin/env python3
+"""ce-lite-persona — resolve a persona name to its prompt file or body.
+
+Generated by ce-lite converter (converter/generate_wrappers.py).
+Don't edit; regenerate from the converter.
+
+The plugin's `bin/` is on PATH because Claude Code exports it for installed
+plugins, so dispatch sites in skill bodies invoke this directly:
+
+    ce-lite-persona ce-security-sentinel --body   # cat the prompt
+    ce-lite-persona ce-security-sentinel --path   # absolute path
+    ce-lite-persona --list                        # tab-separated catalog
+    ce-lite-persona --diagnose                    # install health check
+
+Plugin-root resolution order:
+  1. $CLAUDE_PLUGIN_ROOT if set and contains .claude-plugin/plugin.json.
+  2. Walk up from this script's resolved location.
+
+Persona names accept the canonical form (`ce-security-sentinel`) or the
+bare form (`security-sentinel`).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+
+def find_plugin_root() -> Path:
+    env_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env_root:
+        root = Path(env_root)
+        if (root / ".claude-plugin" / "plugin.json").is_file():
+            return root
+    here = Path(__file__).resolve().parent
+    for cand in [here, *here.parents]:
+        if (cand / ".claude-plugin" / "plugin.json").is_file():
+            return cand
+    sys.exit(
+        "ce-lite-persona: could not locate plugin root "
+        "(checked $CLAUDE_PLUGIN_ROOT and parents of this script). "
+        "Plugin may not be fully installed."
+    )
+
+
+def load_manifest(root: Path) -> dict:
+    path = root / "references" / "agent-prompts" / "manifest.json"
+    if not path.is_file():
+        sys.exit(f"ce-lite-persona: missing manifest at {path}")
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        sys.exit(f"ce-lite-persona: malformed manifest at {path}: {exc}")
+
+
+def canonicalize(name: str) -> str:
+    return name if name.startswith("ce-") else f"ce-{name}"
+
+
+def find_persona(manifest: dict, name: str) -> dict:
+    canonical = canonicalize(name)
+    for agent in manifest.get("agents", []):
+        if agent.get("name") == canonical:
+            return agent
+    known = ", ".join(sorted(a["name"] for a in manifest.get("agents", [])))
+    sys.exit(
+        f"ce-lite-persona: unknown persona '{name}'. "
+        f"Known personas: {known}"
+    )
+
+
+def cmd_path(root: Path, persona: dict) -> int:
+    path = root / persona["prompt_path"]
+    if not path.is_file():
+        sys.exit(
+            f"ce-lite-persona: prompt file missing: {path} "
+            f"(manifest declares it; partial install?)"
+        )
+    print(path)
+    return 0
+
+
+def cmd_body(root: Path, persona: dict) -> int:
+    path = root / persona["prompt_path"]
+    if not path.is_file():
+        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
+    sys.stdout.write(path.read_text(encoding="utf-8"))
+    return 0
+
+
+def cmd_list(manifest: dict) -> int:
+    for agent in manifest.get("agents", []):
+        desc = (agent.get("description", "") or "").splitlines()
+        first_line = desc[0] if desc else ""
+        sys.stdout.write(f"{agent['name']}\\t{first_line}\\n")
+    return 0
+
+
+def cmd_diagnose(root: Path, manifest: dict) -> int:
+    sys.stdout.write(f"plugin_root: {root}\\n")
+    sys.stdout.write(
+        f"manifest:    {root / 'references' / 'agent-prompts' / 'manifest.json'}\\n"
+    )
+    sys.stdout.write(f"personas:    {len(manifest.get('agents', []))}\\n")
+    missing = [
+        a["name"] for a in manifest.get("agents", [])
+        if not (root / a["prompt_path"]).is_file()
+    ]
+    if missing:
+        sys.stderr.write(
+            f"ce-lite-persona: missing prompt files for: {', '.join(missing)}\\n"
+        )
+        return 1
+    sys.stdout.write("status:      ok\\n")
+    return 0
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        prog="ce-lite-persona",
+        description=(
+            "Resolve a ce-lite persona name to its prompt file path or body. "
+            "Invoked from generated SKILL.md dispatch sites and orchestrator "
+            "preambles to avoid the per-dispatch glob/find dance."
+        ),
+    )
+    parser.add_argument(
+        "persona", nargs="?",
+        help="canonical (ce-security-sentinel) or bare (security-sentinel) name",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--path", action="store_true",
+        help="print absolute path to the persona's prompt file",
+    )
+    group.add_argument(
+        "--body", action="store_true",
+        help="cat the prompt file contents to stdout (default)",
+    )
+    group.add_argument(
+        "--list", action="store_true", dest="list_all",
+        help="list all available personas (name<TAB>description)",
+    )
+    group.add_argument(
+        "--diagnose", action="store_true",
+        help="print plugin root, manifest path, and per-persona prompt presence",
+    )
+    args = parser.parse_args(argv)
+
+    root = find_plugin_root()
+    manifest = load_manifest(root)
+
+    if args.list_all:
+        return cmd_list(manifest)
+    if args.diagnose:
+        return cmd_diagnose(root, manifest)
+    if not args.persona:
+        parser.error(
+            "persona name required unless --list or --diagnose is given"
+        )
+    persona = find_persona(manifest, args.persona)
+    if args.path:
+        return cmd_path(root, persona)
+    return cmd_body(root, persona)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
+'''
+
+
+def write_persona_resolver(dist: Path) -> Path:
+    """Emit dist/bin/ce-lite-persona, executable."""
+    bin_dir = dist / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    resolver_path = bin_dir / "ce-lite-persona"
+    resolver_path.write_text(render_persona_resolver(), encoding="utf-8")
+    resolver_path.chmod(0o755)
+    return resolver_path
 
 
 # ---- UserPromptSubmit hook (Phase B.7) ----
@@ -925,6 +1084,7 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
 
     panel_path = write_panel(dist, personas)
     meta_skill_path = write_meta_skill(dist)
+    resolver_path = write_persona_resolver(dist)
     hook_paths = write_hooks(dist)
 
     # Phase B.7: ce-specialist meta-agent removed — Phase B.6 eval measured
@@ -945,8 +1105,9 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
     print(
         f"generate_wrappers.py: wrote {len(written)} wrappers "
         f"({used_overrides} from overrides, {len(written) - used_overrides} via Pass A) "
-        f"+ ce-ask-panel + ce-ask discovery skill + UserPromptSubmit hook "
-        f"({len(hook_paths)} files)",
+        f"+ ce-ask-panel ({panel_path.name}) + ce-ask discovery skill ({meta_skill_path.name}) "
+        f"+ bin/ce-lite-persona resolver ({resolver_path.name}) "
+        f"+ UserPromptSubmit hook ({len(hook_paths)} files)",
         file=sys.stderr,
     )
     return 0

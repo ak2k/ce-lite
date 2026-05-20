@@ -19,12 +19,17 @@ Run after extract.py + rewrite.py. Asserts:
     dist/commands/, and vice versa — no orphans either direction. Plugin-
     namespaced skill autocomplete entries don't reliably dispatch on submit;
     commands/ wrappers do. generate_commands.py is the stage that emits them.
+11. If dist/bin/ exists, ce-lite-persona resolver shim is present, executable,
+    and self-identifies. Wrapper SKILL.md bodies and the orchestrator
+    dispatch-protocol preamble both call this shim instead of embedding
+    Glob/find discovery scaffolding; if it's missing they fail at runtime.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -146,6 +151,43 @@ def check_hooks_dir(dist: Path) -> None:
                 f"the rules file was hand-edited without updating "
                 f"DEFAULT_HOOK_RULES in generate_wrappers.py."
             )
+
+
+def check_bin_dir(dist: Path) -> None:
+    """Validate dist/bin/ resolver shim if present.
+
+    Wrapper SKILL.md bodies and the orchestrator dispatch-protocol preamble
+    both invoke `ce-lite-persona <name> --body` instead of carrying Glob/find
+    discovery scaffolding inline. If the shim is missing, mismatched, or
+    not executable, those dispatch sites will fail at runtime — fail loud
+    here rather than at first-use.
+
+    Pre-resolver dist (or upstream pristine) won't have a bin/ at all,
+    which is also fine.
+    """
+    bin_dir = dist / "bin"
+    if not bin_dir.exists():
+        return
+
+    resolver = bin_dir / "ce-lite-persona"
+    if not resolver.is_file():
+        fail(
+            f"dist/bin/ exists but is missing ce-lite-persona resolver shim. "
+            f"generate_wrappers.py should have emitted it."
+        )
+    if not os.access(resolver, os.X_OK):
+        fail(
+            f"dist/bin/ce-lite-persona is not executable. "
+            f"generate_wrappers.py should chmod 0o755 after writing it."
+        )
+    text = resolver.read_text(encoding="utf-8", errors="replace")
+    if not text.startswith("#!"):
+        fail(f"dist/bin/ce-lite-persona: missing shebang line")
+    if "ce-lite-persona" not in text:
+        fail(
+            f"dist/bin/ce-lite-persona: file does not self-identify "
+            f"(missing 'ce-lite-persona' string). Wrong file emitted?"
+        )
 
 
 def check_plugin_json(dist: Path) -> dict:
@@ -471,6 +513,7 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
     try:
         check_no_agents_dir(dist)
         check_hooks_dir(dist)
+        check_bin_dir(dist)
         plugin_data = check_plugin_json(dist)
         print(f"  plugin: name={plugin_data['name']} version={plugin_data['version']}", file=sys.stderr)
 
