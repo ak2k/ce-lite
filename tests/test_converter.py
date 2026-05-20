@@ -1330,3 +1330,154 @@ def test_lite_suffix_empty_upstream_tag(tmp_path: Path):
     _init_repo(tmp_path)
     _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3")
     assert lite_suffix_from_git(tmp_path, "") == "-lite"
+
+
+# -------- cross-corpus validators (validate.py) --------
+
+from validate import (  # noqa: E402
+    ValidationError,
+    check_dispatch_sources_cross_corpus,
+    check_hook_rules_cross_corpus,
+)
+
+
+def _make_dist_with_hooks_and_manifest(
+    tmp_path: Path,
+    manifest_personas: list[str],
+    rule_personas: list[str],
+) -> Path:
+    dist = tmp_path / "dist"
+    (dist / "references" / "agent-prompts").mkdir(parents=True)
+    (dist / "hooks").mkdir()
+    (dist / "skills").mkdir()
+    (dist / "references" / "agent-prompts" / "manifest.json").write_text(
+        _json.dumps(
+            {
+                "schema_version": 1,
+                "upstream_tag": "test",
+                "agent_count": len(manifest_personas),
+                "agents": [
+                    {
+                        "name": n,
+                        "description": f"desc for {n}",
+                        "model": "inherit",
+                        "tools": None,
+                        "prompt_path": f"references/agent-prompts/{n}.md",
+                        "upstream_source": f"agents/{n}.agent.md",
+                    }
+                    for n in manifest_personas
+                ],
+            }
+        )
+    )
+    (dist / "hooks" / "skill-rules.json").write_text(
+        _json.dumps(
+            {
+                "config": {"haiku_classifier": {"enabled": False}},
+                "rules": [
+                    {"persona": p, "keywords": ["x"], "phrasing": "x"}
+                    for p in rule_personas
+                ],
+            }
+        )
+    )
+    return dist
+
+
+def test_check_hook_rules_cross_corpus_passes_when_all_personas_in_manifest(
+    tmp_path: Path,
+):
+    dist = _make_dist_with_hooks_and_manifest(
+        tmp_path,
+        manifest_personas=["ce-a-reviewer", "ce-b-reviewer", "ce-c-reviewer"],
+        rule_personas=["ce-a-reviewer", "ce-b-reviewer"],
+    )
+    check_hook_rules_cross_corpus(dist)  # no raise
+
+
+def test_check_hook_rules_cross_corpus_fails_on_unknown_persona(tmp_path: Path):
+    dist = _make_dist_with_hooks_and_manifest(
+        tmp_path,
+        manifest_personas=["ce-a-reviewer"],
+        rule_personas=["ce-a-reviewer", "ce-typo-reviewer"],
+    )
+    with pytest.raises(ValidationError, match="ce-typo-reviewer"):
+        check_hook_rules_cross_corpus(dist)
+
+
+def test_check_hook_rules_cross_corpus_skips_when_no_hooks_dir(tmp_path: Path):
+    """Pre-B.7 dist (no hooks/) shouldn't fail this check."""
+    dist = tmp_path / "dist"
+    (dist / "references" / "agent-prompts").mkdir(parents=True)
+    (dist / "references" / "agent-prompts" / "manifest.json").write_text(
+        _json.dumps({"agents": []})
+    )
+    check_hook_rules_cross_corpus(dist)  # no raise — file absent → skip
+
+
+def _make_dist_with_resolver(
+    tmp_path: Path,
+    dispatch_sources: list[str],
+    via_used_in_skills: list[tuple[str, str]],  # (skill_name, via_value)
+) -> Path:
+    """Build a tempdir with converter/resources/ce-lite-persona + dist/skills/.
+
+    The resolver source contains a synthetic DISPATCH_SOURCES set; skills
+    contain `--via X` references that may or may not be in that set.
+    """
+    repo_root = tmp_path
+    (repo_root / "converter" / "resources").mkdir(parents=True)
+    resolver = repo_root / "converter" / "resources" / "ce-lite-persona"
+    sources_literal = ",\n    ".join(f'"{s}"' for s in dispatch_sources)
+    resolver.write_text(
+        f"#!/usr/bin/env python3\nDISPATCH_SOURCES = {{\n    {sources_literal}\n}}\n"
+    )
+
+    dist = repo_root / "dist"
+    (dist / "skills").mkdir(parents=True)
+    for skill_name, via in via_used_in_skills:
+        skill_dir = dist / "skills" / skill_name
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill_name}\n---\nUse `ce-lite-persona X --prefix --via {via}`.\n"
+        )
+    return dist
+
+
+def test_check_dispatch_sources_cross_corpus_passes_when_all_via_in_set(
+    tmp_path: Path,
+):
+    dist = _make_dist_with_resolver(
+        tmp_path,
+        dispatch_sources=["ce-ask-direct", "ce-code-review", "ce-ask-panel"],
+        via_used_in_skills=[
+            ("ce-code-review", "ce-code-review"),
+            ("ce-ask", "ce-ask-direct"),
+        ],
+    )
+    check_dispatch_sources_cross_corpus(dist)
+
+
+def test_check_dispatch_sources_cross_corpus_fails_on_unknown_via(tmp_path: Path):
+    dist = _make_dist_with_resolver(
+        tmp_path,
+        dispatch_sources=["ce-ask-direct", "ce-code-review"],
+        via_used_in_skills=[
+            ("ce-bad", "ce-mystery-source"),
+        ],
+    )
+    with pytest.raises(ValidationError, match="ce-mystery-source"):
+        check_dispatch_sources_cross_corpus(dist)
+
+
+def test_check_dispatch_sources_cross_corpus_skips_when_no_resolver_source(
+    tmp_path: Path,
+):
+    """validate.py run against an isolated dist (e.g., tempdir without sibling
+    converter/) should skip this check rather than fail."""
+    dist = tmp_path / "dist"
+    (dist / "skills" / "ce-x").mkdir(parents=True)
+    (dist / "skills" / "ce-x" / "SKILL.md").write_text(
+        "---\nname: ce-x\n---\nUses --via ce-anywhere\n"
+    )
+    check_dispatch_sources_cross_corpus(dist)  # no raise

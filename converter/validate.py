@@ -154,6 +154,104 @@ def check_hooks_dir(dist: Path) -> None:
             )
 
 
+def check_hook_rules_cross_corpus(dist: Path) -> None:
+    """Cross-corpus: every persona in dist/hooks/skill-rules.json must exist
+    in the manifest.
+
+    Catches drift when a persona is removed upstream but the override file
+    (converter/overrides/persona-keywords.yaml) still references it, OR
+    when a typo in an override creates a rule pointing at a non-existent
+    persona. Without this check, the hook would suggest dispatching a
+    persona the resolver can't find — surfaces only at runtime.
+    """
+    rules_path = dist / "hooks" / "skill-rules.json"
+    if not rules_path.is_file():
+        return  # pre-B.7 dist; check_hooks_dir already handled this
+
+    try:
+        rules_data = json.loads(rules_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"dist/hooks/skill-rules.json: invalid JSON: {exc}")
+
+    rule_personas = {r.get("persona") for r in rules_data.get("rules", [])}
+    rule_personas.discard(None)
+
+    manifest_path = dist / "references" / "agent-prompts" / "manifest.json"
+    manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_personas = {a["name"] for a in manifest_data.get("agents", [])}
+
+    unknown = rule_personas - manifest_personas
+    if unknown:
+        fail(
+            f"hook rules reference personas not in manifest: {sorted(unknown)}. "
+            f"Either the persona was removed upstream (update "
+            f"converter/overrides/persona-keywords.yaml) or the manifest is stale "
+            f"(re-run extract.py against the current upstream)."
+        )
+
+
+_DISPATCH_VIA_RE = re.compile(r"--via\s+([a-z][a-z0-9-]+)")
+_DISPATCH_SOURCES_LITERAL_RE = re.compile(
+    r"DISPATCH_SOURCES\s*=\s*\{([^}]+)\}", re.DOTALL
+)
+_DISPATCH_SOURCE_STRING_RE = re.compile(r'"([a-z][a-z0-9-]+)"')
+
+
+def _load_dispatch_sources(repo_root: Path) -> set[str] | None:
+    """Parse DISPATCH_SOURCES from converter/resources/ce-lite-persona.
+
+    Returns the set of declared dispatch-source names, or None if the
+    resolver source is not reachable (e.g. validate.py run against a
+    tempdir dist without a sibling converter/). The resolver shim is
+    stdlib-only and can't import from the converter; the literal is
+    parsed via regex instead of importing.
+    """
+    resolver = repo_root / "converter" / "resources" / "ce-lite-persona"
+    if not resolver.is_file():
+        return None
+    text = resolver.read_text(encoding="utf-8")
+    m = _DISPATCH_SOURCES_LITERAL_RE.search(text)
+    if not m:
+        return None
+    return set(_DISPATCH_SOURCE_STRING_RE.findall(m.group(1)))
+
+
+def check_dispatch_sources_cross_corpus(dist: Path) -> None:
+    """Cross-corpus: every --via X in any orchestrator SKILL.md must be in
+    converter/resources/ce-lite-persona's DISPATCH_SOURCES set.
+
+    Catches the failure mode where someone adds a new orchestrator
+    (with a new --via name) but forgets to update DISPATCH_SOURCES. The
+    resolver fails loud on unknown --via values at runtime; this check
+    moves that failure to build time.
+
+    Skipped if the resolver source can't be located (e.g. validate.py
+    run against a tempdir dist with no sibling converter/).
+    """
+    # repo_root is the directory containing dist/; the resolver source lives
+    # at <repo_root>/converter/resources/ce-lite-persona. dist may itself be
+    # a tempdir during tests; in that case the resolver source isn't reachable
+    # and the check is skipped.
+    repo_root = dist.parent
+    sources = _load_dispatch_sources(repo_root)
+    if sources is None:
+        return
+
+    used: set[str] = set()
+    for skill_md in (dist / "skills").rglob("SKILL.md"):
+        text = skill_md.read_text(encoding="utf-8")
+        used.update(_DISPATCH_VIA_RE.findall(text))
+
+    unknown = used - sources
+    if unknown:
+        fail(
+            f"orchestrator SKILL.md bodies use --via values not declared in "
+            f"DISPATCH_SOURCES (converter/resources/ce-lite-persona): "
+            f"{sorted(unknown)}. Either typo in a SKILL.md, or add the "
+            f"source to DISPATCH_SOURCES and regenerate the resolver."
+        )
+
+
 def check_bin_dir(dist: Path) -> None:
     """Validate dist/bin/ resolver shim if present.
 
@@ -550,6 +648,14 @@ def main(dist_dir: str, upstream_dir: str | None = None) -> int:
         check_commands(dist)
         print(
             "  commands: every skill has a matching slash-command wrapper",
+            file=sys.stderr,
+        )
+
+        check_hook_rules_cross_corpus(dist)
+        check_dispatch_sources_cross_corpus(dist)
+        print(
+            "  cross-corpus: hook rules personas ⊆ manifest; "
+            "--via values ⊆ DISPATCH_SOURCES",
             file=sys.stderr,
         )
 
