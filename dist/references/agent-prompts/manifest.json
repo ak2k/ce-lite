@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "upstream_tag": "compound-engineering-v3.8.1",
+  "upstream_tag": "compound-engineering-v3.8.3",
   "agent_count": 49,
   "agents": [
     {
@@ -114,8 +114,7 @@
       "tools": [
         "Read",
         "Grep",
-        "Glob",
-        "Bash"
+        "Glob"
       ],
       "prompt_path": "references/agent-prompts/ce-coherence-reviewer.md",
       "upstream_source": "agents/ce-coherence-reviewer.agent.md"
@@ -620,10 +619,7 @@
       "name": "ce-web-researcher",
       "description": "Performs iterative web research and returns structured external grounding. Use when ideating outside the codebase, validating prior art, scanning competitor patterns, finding cross-domain analogies, or fetching market signals. Prefer over manual web searches for structured external context.",
       "model": "sonnet",
-      "tools": [
-        "WebSearch",
-        "WebFetch"
-      ],
+      "tools": null,
       "prompt_path": "references/agent-prompts/ce-web-researcher.md",
       "upstream_source": "agents/ce-web-researcher.agent.md"
     }
