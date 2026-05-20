@@ -20,65 +20,41 @@ Persona names are the **canonical** names from the plugin's persona manifest
 (e.g. `ce-security-sentinel`, `ce-architecture-strategist`), NOT the
 `ce-ask-*` wrapper names.
 
-> **Locating the plugin's persona prompts.** A bare `references/agent-prompts/`
-> path resolves relative to the user's project, which is usually not where
-> this plugin is installed. Use Glob (rooted at `~`) to find the actual path:
->
-> ```
-> **/.claude/plugins/cache/ce-lite/*/references/agent-prompts/<name>.md
-> ```
->
-> If that pattern returns nothing, fall back to `Bash`:
->
-> ```
-> find ~/.claude/plugins/cache -name '<name>.md' -path '*/agent-prompts/*' 2>/dev/null | head -1
-> ```
->
-> Cache the discovered plugin root (the directory containing
-> `.claude-plugin/plugin.json`) — every persona prompt lives under the same
-> root, so subsequent lookups in this turn don't need to re-glob.
-
 ## Steps
 
 1. Parse the first whitespace-delimited token as a comma-separated persona
-   list. Trim each name. Treat the rest of the input as the user's task
-   context.
-2. Locate the plugin root via the discovery instructions above and read
-   `<plugin-root>/references/agent-prompts/manifest.json`. Validate each
-   named persona is in `agents[].name`. If any are unknown:
+   list (trim each name). Treat the rest as the user's task context.
 
-   > Unknown persona(s): `<list>`. Known personas: `<list-from-manifest>`.
-   > Use the canonical names (e.g. `ce-security-sentinel`), not wrapper
-   > names (`ce-ask-security-sentinel`).
+2. Validate each persona by running `ce-lite-persona <name> --path` via
+   Bash. Non-zero exit means an unknown persona — the resolver's stderr
+   lists all known personas. Surface that to the user and stop without
+   dispatching anything; partial dispatches confuse merged output.
 
-   Stop without dispatching anything — partial dispatches confuse the
-   merged output.
-3. For each validated persona, dispatch in parallel:
-   - Read its prompt body from
-     `<plugin-root>/references/agent-prompts/<persona>.md`.
-   - Spawn an agent with `subagent_type: "general-purpose"`.
-   - Prepend a preamble of the form:
+3. For each validated persona, dispatch in parallel via `Agent` with
+   `subagent_type: "general-purpose"` and
+   `description: "<persona>: <task summary>"` (meaningful trace label).
+   The prompt is `ce-lite-persona <persona> --body` output followed by:
 
-     ```
-     [ce-persona=<persona> via=ce-ask-panel]
+   ```
+   [ce-persona=<persona> via=ce-ask-panel]
 
-     You are operating as the <persona> specialist. Your role is defined in
-     the prompt body above. Honour the manifest's tools/model constraints
-     for this role; if a task pulls you toward tools outside that set, stop
-     and explain why your role requires it.
-     ```
+   You are operating as the <persona> specialist. Honour the manifest's
+   tools/model constraints for this role; if a task pulls you toward tools
+   outside that set, stop and explain why your role requires it.
+   ```
 
-   - Then the user-supplied task context.
-4. Wait for all to complete. Merge into a single response, grouping by
-   persona with section headers (`## <persona> findings`). Preserve each
-   persona's structured output rather than collapsing into prose.
+   Then a blank line and the user-supplied task context.
+
+4. Wait for all dispatches to complete. Merge into one response, grouping
+   by persona with section headers (`## <persona> findings`). Preserve each
+   persona's structured output — don't collapse into prose.
 
 ## Notes
 
 - Trace tag `via=ce-ask-panel` distinguishes panel dispatch from direct
   invocation (`via=ce-ask-direct`) when grepping transcripts.
-- For one persona, prefer `/ce-ask-<persona-bare-name>` — slightly cheaper
-  than going through the panel parser.
-- For all-personas-pertinent reviews of code or documents, prefer the
-  orchestrator skills (`/ce-code-review`, `/ce-doc-review`) which include
-  conditional persona selection logic.
+- For one persona, prefer `/ce-ask-<persona-bare-name>` — cheaper than
+  going through the panel parser.
+- For full-pipeline reviews, prefer the orchestrator skills
+  (`/ce-code-review`, `/ce-doc-review`) which include conditional persona
+  selection.
