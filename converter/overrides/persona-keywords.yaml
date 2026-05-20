@@ -1,0 +1,889 @@
+# Pass B overrides for skill-rules.json
+#
+# Format: one top-level key per persona (canonical name with ce- prefix).
+# Each entry can provide `keywords` (list) and/or `phrasing` (string) to
+# replace the Pass A defaults derived from the manifest description.
+# The `_rationale` field is for transcript review and is ignored at
+# build time (see generate_wrappers.load_keyword_overrides).
+#
+# Anything not listed here keeps Pass A's auto-derived rule, which is
+# built from the persona's manifest description + name (see
+# derive_keyword_rule in converter/generate_wrappers.py).
+#
+# Maintenance: refine via `converter/refine-keyword-rules.py`
+# (claude -p driven, run pre-release, output committed). Not a CI step —
+# the 'no LLM in CI' invariant holds.
+#
+ce-adversarial-document-reviewer:
+  _rationale: Keywords target document-type signals (RFC, ADR, PRD, design doc, technical
+    spec) and adversarial-review actions (unstated assumptions) distinctive to high-stakes
+    architectural and requirements artifacts where premise-challenging adds unique
+    value over standard review.
+  keywords:
+  - RFC
+  - ADR
+  - PRD
+  - design doc
+  - architectural decision
+  - requirements document
+  - design proposal
+  - technical spec
+  - unstated assumptions
+  - architecture proposal
+  phrasing: High-stakes document prompt detected. Consider `/ce-lite:ce-adversarial-document-reviewer`
+    for adversarial premise-challenging, assumption-surfacing, and decision stress-testing
+    on architecture and requirements docs.
+ce-adversarial-reviewer:
+  _rationale: Captures both adversarial intent signals ("try to break", "failure scenario",
+    "abuse case") and high-risk domain vocabulary ("billing", "payment flow", "backfill",
+    "data migration", "webhook", "race condition"), without overlapping pattern-based
+    security review personas.
+  keywords:
+  - race condition
+  - failure scenario
+  - try to break
+  - data migration
+  - payment flow
+  - what could go wrong
+  - backfill
+  - billing
+  - webhook
+  - abuse case
+  phrasing: High-risk diff or adversarial-review framing. Consider `/ce-lite:ce-adversarial-reviewer`
+    for chaos-engineer review that constructs specific failure chains across auth,
+    payments, data migrations, and external APIs.
+ce-agent-native-reviewer:
+  _rationale: 'Keywords target the agent-native parity domain exclusively: cross-referencing
+    UI actions against agent tool definitions, coverage gaps, and runtime context
+    injection — all distinctive to this persona.'
+  keywords:
+  - agent-native
+  - action parity
+  - context parity
+  - tool parity
+  - tool coverage
+  - agent integration
+  - tool definitions
+  - UI actions
+  - agent tools
+  - dynamic context
+  phrasing: Prompt looks agent-parity-flavored. Consider `/ce-lite:ce-agent-native-reviewer`
+    for a focused audit of action/context parity between UI features and agent tools,
+    including system-prompt completeness.
+ce-ankane-readme-writer:
+  _rationale: Keywords target the narrow intersection of Ruby gem packaging vocabulary
+    and README documentation requests, minimizing false positives from general Ruby
+    or general README/docs queries.
+  keywords:
+  - ankane
+  - ruby gem readme
+  - gem readme
+  - gemspec
+  - rubygems
+  - gem documentation
+  - imperative voice
+  - gem version badge
+  - write gem docs
+  - ankane template
+  phrasing: Gem README authoring detected. Consider `/ce-lite:ce-ankane-readme-writer`
+    for Ankane-template READMEs with imperative voice, standard section ordering,
+    and Ruby gem conventions.
+ce-api-contract-reviewer:
+  _rationale: Keywords target the precise vocabulary users employ when touching API
+    contracts — version semantics, consumer impact, schema mutations — while deliberately
+    excluding generic terms that would fire on unrelated reviews.
+  keywords:
+  - breaking change
+  - backward compat
+  - deprecation
+  - response schema
+  - semver
+  - existing clients
+  - wire format
+  - field rename
+  - OpenAPI
+  phrasing: API contract flavor detected. Consider `/ce-lite:ce-api-contract-reviewer`
+    for a specialist review of breaking changes, versioning gaps, and backward-compatibility
+    impact on existing consumers.
+ce-architecture-strategist:
+  keywords:
+  - factor out
+  - extract method
+  - extract class
+  - duplicat
+  - copy-pasted
+  - DRY
+  - coupling
+  - abstraction
+  - boundaries
+  - structural refactor
+  - service boundaries
+  - module bound
+  - pattern compliance
+  - design integrity
+  phrasing: 'Architecture/design concerns visible. Consider `/ce-lite:ce-ask-architecture-strategist`
+    for a structural review (pattern compliance, layer violations, naming consistency).
+
+    '
+ce-best-practices-researcher:
+  _rationale: This persona specializes in external research and synthesis of industry
+    standards, making it the right fit when users ask about idiomatic patterns, community
+    conventions, official documentation, or API deprecation status.
+  keywords:
+  - best practice
+  - industry standard
+  - community convention
+  - idiomatic
+  - deprecated
+  - canonical
+  - official documentation
+  - recommended pattern
+  - real-world example
+  - framework convention
+  phrasing: Looks like a standards/conventions question. Consider `/ce-lite:ce-best-practices-researcher`
+    for synthesizing authoritative docs, community conventions, and idiomatic patterns
+    — with deprecation checks included.
+ce-code-simplicity-reviewer:
+  keywords:
+  - YAGNI
+  - over-engineered
+  - premature abstraction
+  - redundant abstraction
+  - simplify
+  - simpler way
+  - is this too clever
+  - unnecessary indirection
+  - feels overcomplicated
+  - could this be simpler
+  phrasing: 'Simplicity concerns visible. Consider `/ce-lite:ce-ask-code-simplicity-reviewer`
+    for a YAGNI/redundancy review.
+
+    '
+ce-coherence-reviewer:
+  _rationale: Keywords target the narrow slice of prompts about self-contradicting
+    documents and drifting terminology — distinct from feasibility, completeness,
+    or security review — anchored by phrases that only arise when a user suspects
+    a document disagrees with itself.
+  keywords:
+  - terminology drift
+  - internal consistency
+  - section contradicts
+  - contradicts itself
+  - inconsistencies
+  - forward reference
+  - planning document
+  - coherence review
+  - requirements document
+  phrasing: 'Prompt looks document-coherence-flavored. Consider `/ce-lite:ce-coherence-reviewer`
+    for internal-consistency review: contradictions between sections, terminology
+    drift, broken references, and genuine ambiguity.'
+ce-correctness-reviewer:
+  keywords:
+  - edge case
+  - off-by-one
+  - race condition
+  - deadlock
+  - concurrency bug
+  - correctness
+  - logic bug
+  - is this correct
+  - boundary condition
+  phrasing: 'Correctness concerns visible. Consider `/ce-lite:ce-ask-correctness-reviewer`
+    for an edge-case / boundary-condition review.
+
+    '
+ce-data-integrity-guardian:
+  _rationale: Database migration and data-integrity mistakes have catastrophic blast
+    radius in production; these high-precision, domain-specific terms filter precisely
+    for the scenarios this persona was built to catch.
+  keywords:
+  - foreign key
+  - cascade delete
+  - referential integrity
+  - deadlock
+  - NOT NULL
+  - zero-downtime migration
+  - backfill
+  - table lock
+  - idempotent migration
+  - right to erasure
+  phrasing: The prompt looks database or migration-flavored. Consider `/ce-lite:ce-data-integrity-guardian`
+    for migration safety, constraint validation, transaction boundaries, and data-privacy
+    compliance.
+ce-data-migration-expert:
+  _rationale: These terms are tightly scoped to database migration operations—backfills,
+    DDL changes, enum remapping, dual-write patterns—where silent data corruption
+    is the primary risk, making a specialist review distinctly valuable.
+  keywords:
+  - backfill
+  - data migration
+  - column rename
+  - enum conversion
+  - dual-write
+  - id mapping
+  - ALTER TABLE
+  - idempotent
+  - schema change
+  phrasing: Migration-flavored prompt detected. Consider `/ce-lite:ce-data-migration-expert`
+    for validating backfills, ID mappings, enum conversions, and schema changes against
+    production data reality.
+ce-data-migrations-reviewer:
+  _rationale: These terms strongly signal database migration work where deployment-window
+    hazards — swapped enum mappings, missing backfills, unsafe column drops, and broken
+    dual-write transitions — require a specialist rather than a generic code reviewer.
+  keywords:
+  - backfill
+  - migration
+  - dual-write
+  - NOT NULL
+  - enum mapping
+  - column drop
+  - schema change
+  - concurrent index
+  - data backfill
+  - rollback plan
+  phrasing: Schema-change / migration flavor. Consider `/ce-lite:ce-data-migrations-reviewer`
+    for a specialist review of rollback safety, dual-write windows, NOT NULL backfills,
+    and swapped enum mappings.
+ce-deployment-verification-agent:
+  _rationale: Keywords anchor on the concrete artifacts this persona uniquely produces—backfill
+    operations, rollback plans, Go/No-Go gates, data invariants, and SQL verification
+    queries—rather than generic deployment vocabulary, keeping false-positive rates
+    low.
+  keywords:
+  - backfill
+  - rollback plan
+  - go/no-go
+  - production migration
+  - deployment checklist
+  - data invariant
+  - SQL verification
+  - irreversible
+  phrasing: Prompt looks like a risky data deployment. Consider `/ce-lite:ce-deployment-verification-agent`
+    for Go/No-Go checklists, SQL verification queries, rollback procedures, and post-deploy
+    monitoring plans.
+ce-design-implementation-reviewer:
+  _rationale: This persona specializes in systematically comparing live UI implementations
+    against Figma design files to surface pixel-level discrepancies in layout, typography,
+    color, and spacing.
+  keywords:
+  - Figma
+  - pixel-perfect
+  - design fidelity
+  - design tokens
+  - visual regression
+  - design discrepancy
+  - Figma handoff
+  - responsive breakpoint
+  - matches the design
+  - design spec
+  phrasing: Design-comparison prompt detected. Consider `/ce-lite:ce-design-implementation-reviewer`
+    for pixel-perfect Figma vs. live UI comparison — spacing, typography, colors &
+    responsive fidelity.
+ce-design-iterator:
+  _rationale: These keywords target precise UI/UX design-refinement vocabulary (visual
+    hierarchy, micro-interactions, font pairing, hover states) that distinguishes
+    iterative visual work from generic coding, security, or performance tasks.
+  keywords:
+  - visual hierarchy
+  - micro-interactions
+  - font pairing
+  - whitespace
+  - hover states
+  - gradient background
+  - design iteration
+  - visual polish
+  - border-radius
+  - redesign
+  phrasing: Design refinement prompt detected. Consider `/ce-lite:ce-design-iterator`
+    for iterative screenshot→analyze→improve cycles that systematically polish UI
+    components to a professional finish.
+ce-design-lens-reviewer:
+  _rationale: Keywords target design-completeness vocabulary—IA, interaction-state
+    gaps, wireframes, AI-slop signals—that indicate a user needs planning documents
+    reviewed for implementation-blocking design omissions distinctive to this persona.
+  keywords:
+  - information architecture
+  - interaction states
+  - empty state
+  - AI slop
+  - happy path
+  - navigation model
+  - missing states
+  - wireframe
+  - interaction model
+  phrasing: Design-planning doc detected. Consider `/ce-lite:ce-design-lens-reviewer`
+    for dimensional review of IA, interaction states, user flows, and AI-slop risk
+    before implementation begins.
+ce-dhh-rails-reviewer:
+  _rationale: Keywords target Rails-specific architectural debates—service objects,
+    repository patterns, anemic models, JWT vs sessions, GraphQL ceremony, Hotwire
+    alternatives—that signal code drifting from Rails conventions and warrant the
+    DHH opinionated review persona.
+  keywords:
+  - service object
+  - repository pattern
+  - dependency injection
+  - anemic model
+  - GraphQL
+  - presenter
+  - service layer
+  - JWT
+  - Hotwire
+  - majestic monolith
+  phrasing: The prompt looks Rails-architecture-flavored. Consider `/ce-lite:ce-dhh-rails-reviewer`
+    for a DHH-perspective review that catches service objects, repository layers,
+    JWT-over-session, and other un-Rails abstractions.
+ce-feasibility-reviewer:
+  _rationale: Keywords target planning-document vocabulary (brownfield, migration
+    risk, dependency gap, rollback strategy) that is distinctive to feasibility review
+    and unlikely to collide with security, performance, or generic code-review personas.
+  keywords:
+  - feasibility
+  - brownfield
+  - implementable
+  - migration risk
+  - architecture conflict
+  - dependency gap
+  - technical feasibility
+  - planning document
+  - rollback strategy
+  - existing stack
+  phrasing: Prompt looks plan-feasibility-flavored. Consider `/ce-lite:ce-feasibility-reviewer`
+    for architecture conflict, dependency gap, and migration-risk analysis of your
+    technical plan or requirements doc.
+ce-figma-design-sync:
+  _rationale: Keywords target Figma-specific design vocabulary and visual-fidelity
+    language that distinguish design-to-code sync requests from general CSS or frontend
+    work.
+  keywords:
+  - pixel-perfect
+  - Figma design
+  - Figma spec
+  - visual mismatch
+  - design sync
+  - design token
+  - mockup
+  - Figma node
+  - design handoff
+  phrasing: Prompt looks design-sync-flavored. Consider `/ce-lite:ce-figma-design-sync`
+    for pixel-perfect Figma-to-implementation comparison, CSS/Tailwind fixes, and
+    visual diff documentation.
+ce-framework-docs-researcher:
+  _rationale: These keywords are distinctively associated with a user needing authoritative
+    library/framework documentation—migration paths, version constraints, deprecations—rather
+    than code review, security analysis, or implementation assistance.
+  keywords:
+  - breaking changes
+  - migration guide
+  - deprecated
+  - changelog
+  - release notes
+  - upgrade from
+  - official docs
+  - API sunset
+  - version compatibility
+  - peer dependencies
+  phrasing: Docs-research or versioning flavor detected. Consider `/ce-lite:ce-framework-docs-researcher`
+    for fetching official docs, changelogs, migration guides, and deprecation/sunset
+    notices for frameworks and libraries.
+ce-git-history-analyzer:
+  _rationale: Keywords target git-forensic phrasing (blame, bisect, authorship questions)
+    and code-lineage vocabulary that signal a need for archaeological repository analysis
+    rather than current-state code review or general git operations.
+  keywords:
+  - git blame
+  - git bisect
+  - code archaeology
+  - commit history
+  - who wrote
+  - who changed
+  - when was introduced
+  - file evolution
+  phrasing: Prompt looks git-archaeology-flavored. Consider `/ce-lite:ce-git-history-analyzer`
+    for tracing code evolution, blame/bisect analysis, and contributor mapping to
+    explain why code exists in its current form.
+ce-issue-intelligence-analyst:
+  _rationale: Keywords target the distinctive vocabulary of cross-issue synthesis
+    (themes, clustering, landscape, triage) rather than generic bug-fixing language,
+    ensuring the hook fires on prompts about issue intelligence rather than individual
+    defect work.
+  keywords:
+  - GitHub issues
+  - issue tracker
+  - recurring themes
+  - bug patterns
+  - issue landscape
+  - pain patterns
+  - severity trends
+  - issue triage
+  - issue clustering
+  - user complaints
+  phrasing: Issue-analysis flavor detected. Consider `/ce-lite:ce-issue-intelligence-analyst`
+    for surfacing recurring themes, pain patterns, and severity trends across your
+    GitHub issue tracker.
+ce-julik-frontend-races-reviewer:
+  _rationale: This persona targets frontend timing bugs—stale timers, duplicate async
+    work, lifecycle cleanup gaps, and DOM mutation after disconnect—that generic reviewers
+    routinely miss in Turbo/Stimulus/React diffs.
+  keywords:
+  - race condition
+  - setInterval
+  - stale timer
+  - event listener leak
+  - lifecycle cleanup
+  - AbortController
+  - unhandled rejection
+  - stimulus controller
+  - turbo frame
+  - removeEventListener
+  phrasing: Async/lifecycle-flavored prompt. Consider `/ce-lite:ce-julik-frontend-races-reviewer`
+    for race conditions, stale timers, and lifecycle cleanup in Turbo/Stimulus/async
+    UI code.
+ce-kieran-python-reviewer:
+  _rationale: Keywords target exact Python idioms, type-system constructs, and anti-patterns
+    Kieran hunts (missing annotations, exception swallowing, un-Pythonic structure),
+    minimizing false fires from generic prompts.
+  keywords:
+  - pythonic
+  - type hint
+  - type annotation
+  - TypedDict
+  - dataclass
+  - pydantic
+  - context manager
+  - bare except
+  - except pass
+  phrasing: 'Prompt looks Python-quality-flavored. Consider `/ce-lite:ce-kieran-python-reviewer`
+    for strict Pythonic review: type hints, structure, and exception-handling quality.'
+ce-kieran-rails-reviewer:
+  _rationale: Keywords target Rails-exclusive vocabulary (Turbo, Hotwire, before_action,
+    strong parameters, ActiveRecord callbacks) that signal the user is working on
+    a Rails diff matching Kieran's specialist review scope.
+  keywords:
+  - turbo stream
+  - Hotwire
+  - service object
+  - controller action
+  - ActiveRecord
+  - before_action
+  - strong parameters
+  - rails callback
+  - stimulus controller
+  phrasing: Rails-flavored diff detected. Consider `/ce-lite:ce-kieran-rails-reviewer`
+    for a strict Rails review covering controller clarity, Turbo/Hotwire patterns,
+    service object extraction, and regression hunting.
+ce-kieran-typescript-reviewer:
+  _rationale: Keywords target TypeScript-specific constructs (suppression directives,
+    cast patterns, union narrowing) that signal the user needs Kieran's high-bar type-safety
+    and structural-clarity review rather than a generic code reviewer.
+  keywords:
+  - TypeScript
+  - type safety
+  - as any
+  - '@ts-ignore'
+  - discriminated union
+  - type assertion
+  - nullable
+  - type narrowing
+  - ts-expect-error
+  - unknown as
+  phrasing: 'TypeScript-flavored prompt detected. Consider `/ce-lite:ce-kieran-typescript-reviewer`
+    for strict type-safety review: `any` usage, unsafe casts, nullable flows, and
+    discriminated-union exhaustiveness.'
+ce-learnings-researcher:
+  _rationale: This persona specializes in searching docs/solutions/ via frontmatter
+    metadata for past learnings, conventions, and prior decisions—preventing the team
+    from re-discovering what is already documented.
+  keywords:
+  - docs/solutions
+  - past learnings
+  - institutional knowledge
+  - prior learnings
+  - frontmatter
+  - team conventions
+  - existing learnings
+  - knowledge base
+  - solutions directory
+  phrasing: Prompt references past learnings or institutional knowledge. Consider
+    `/ce-lite:ce-learnings-researcher` for searching docs/solutions/ frontmatter to
+    surface applicable team knowledge before work starts.
+ce-maintainability-reviewer:
+  _rationale: Keywords target the five structural smell categories the persona hunts
+    (premature abstraction, indirection, dead code, coupling, naming); all are multi-word
+    phrases or long domain terms that won't collide with security/performance personas.
+  keywords:
+  - premature abstraction
+  - circular dependency
+  - unnecessary indirection
+  - dead code
+  - over-engineered
+  - tight coupling
+  - wrapper class
+  - unused exports
+  - naming obscures
+  - unreachable branch
+  phrasing: Prompt looks maintainability-flavored. Consider `/ce-lite:ce-maintainability-reviewer`
+    for a focused review targeting premature abstraction, dead code, unnecessary indirection,
+    module coupling, and intent-obscuring names.
+ce-pattern-recognition-specialist:
+  keywords:
+  - naming consistency
+  - convention drift
+  - style consistency
+  - naming pattern
+  - matches existing
+  - consistent with
+  - follow the pattern
+  phrasing: 'Pattern/consistency review may help. Consider `/ce-lite:ce-ask-pattern-recognition-specialist`
+    to surface duplication and convention drift.
+
+    '
+ce-performance-oracle:
+  keywords:
+  - performance
+  - latency
+  - bottleneck
+  - slow query
+  - N+1
+  - p99
+  - throughput
+  - memory pressure
+  phrasing: 'Performance angle visible. Consider `/ce-lite:ce-ask-performance-oracle`
+    for a structured performance review.
+
+    '
+ce-performance-reviewer:
+  _rationale: Keywords target the exact runtime anti-patterns this persona hunts (N+1,
+    hot-path allocations, unbounded queries, blocking I/O, cache eviction) using domain-specific
+    phrases that are long enough to avoid greedy substring false positives and are
+    not shared with security or other personas.
+  keywords:
+  - N+1 query
+  - eager loading
+  - query inside loop
+  - missing LIMIT
+  - blocking I/O
+  - hot path
+  - memoization
+  - cache eviction
+  - full table scan
+  phrasing: Prompt looks performance-flavored. Consider `/ce-lite:ce-performance-reviewer`
+    for expert review of N+1 queries, unbounded memory growth, missing pagination,
+    and hot-path bottlenecks.
+ce-pr-comment-resolver:
+  _rationale: Keywords target GitHub PR thread-specific terminology (review thread,
+    outdated thread, reply to reviewer) to fire on resolution workflows without overlapping
+    general code-writing or analysis personas.
+  keywords:
+  - review thread
+  - reviewer feedback
+  - PR threads
+  - resolve comment
+  - reply to reviewer
+  - outdated thread
+  - code review comments
+  - address reviewer
+  - comment resolver
+  phrasing: Prompt looks PR-thread-flavored. Consider `/ce-lite:ce-pr-comment-resolver`
+    for evaluating reviewer threads, implementing fixes, and generating structured
+    reply summaries.
+ce-previous-comments-reviewer:
+  _rationale: Targets iterative PR review cycles where prior feedback may have been
+    dropped, partially addressed, or accidentally reverted in subsequent commits.
+  keywords:
+  - prior review comments
+  - previous feedback
+  - unresolved comments
+  - review threads
+  - unaddressed comments
+  - follow-up review
+  - feedback addressed
+  - prior feedback
+  - review comments resolved
+  phrasing: Iterative-review PR context detected. Consider `/ce-lite:ce-previous-comments-reviewer`
+    for verifying prior reviewer feedback was addressed in the current diff.
+ce-product-lens-reviewer:
+  _rationale: This persona targets the "building the wrong thing well" failure mode,
+    so it should fire on prompts about PRDs, roadmaps, and planning docs where strategic
+    premise, prioritization coherence, and goal-work alignment are the core risks.
+  keywords:
+  - product requirements
+  - planning document
+  - opportunity cost
+  - goal alignment
+  - PRD
+  - premise
+  - prioritization
+  - build vs buy
+  - requirements document
+  - product roadmap
+  phrasing: Prompt looks product-strategy-flavored. Consider `/ce-lite:ce-ask-product-lens-reviewer`
+    for premise challenges, strategic consequences, and goal-alignment review by a
+    senior product leader.
+ce-project-standards-reviewer:
+  _rationale: Keywords target the narrow vocabulary of project-standards work — CLAUDE.md/AGENTS.md
+    compliance, frontmatter fields, reference-inclusion modes, and portability — which
+    no other persona in the manifest covers.
+  keywords:
+  - CLAUDE.md
+  - AGENTS.md
+  - frontmatter
+  - YAML frontmatter
+  - naming convention
+  - cross-platform portability
+  - standards compliance
+  - backtick path
+  - reference inclusion
+  - skill compliance
+  phrasing: Prompt looks project-standards-flavored. Consider `/ce-lite:ce-project-standards-reviewer`
+    for auditing against CLAUDE.md / AGENTS.md rules (frontmatter, naming, reference
+    inclusion, portability).
+ce-reliability-reviewer:
+  _rationale: Keywords target the precise vocabulary of distributed-systems reliability
+    engineering—multi-word phrases like "circuit breaker", "retry storm", and "cascading
+    failure" are high-precision signals that are highly unlikely to collide with security,
+    performance, or generic code-review prompts.
+  keywords:
+  - circuit breaker
+  - exponential backoff
+  - retry storm
+  - cascading failure
+  - graceful degradation
+  - dead letter
+  - bulkhead
+  - health check
+  - backoff
+  - timeout
+  phrasing: Reliability/failure-mode flavor detected. Consider `/ce-lite:ce-reliability-reviewer`
+    for a focused review of error handling, retries, timeouts, circuit breakers, and
+    cascading failure paths.
+ce-repo-research-analyst:
+  _rationale: Keywords target the persona's core use cases—onboarding, navigating
+    structure, and surfacing conventions/templates—using domain-specific multi-word
+    phrases that rarely appear in prompts aimed at other specialists.
+  keywords:
+  - naming conventions
+  - contribution guidelines
+  - onboard
+  - directory structure
+  - monorepo
+  - coding standards
+  - codebase conventions
+  - issue templates
+  - module structure
+  phrasing: 'Prompt looks codebase-research-flavored. Consider `/ce-lite:ce-repo-research-analyst`
+    for systematic repo research: structure, conventions, patterns, templates, and
+    onboarding insights.'
+ce-schema-drift-detector:
+  _rationale: These keywords target Rails-specific ORM vocabulary and migration workflow
+    (schema.rb, db:migrate, migration DSL methods like add_column/create_table) that
+    uniquely identify schema drift scenarios rather than generic database or code
+    review tasks.
+  keywords:
+  - schema.rb
+  - schema drift
+  - db:migrate
+  - ActiveRecord
+  - add_column
+  - create_table
+  - schema version
+  - unrelated migration
+  - db/migrate
+  - migration timestamp
+  phrasing: Rails schema-drift signals detected. Consider `/ce-lite:ce-schema-drift-detector`
+    for detecting unrelated schema.rb changes by cross-referencing your PR's migrations
+    against schema.rb.
+ce-scope-guardian-reviewer:
+  _rationale: Keywords target vocabulary exclusive to scope-and-complexity review
+    (YAGNI, gold-plating, scope creep, premature abstraction) that strongly signals
+    a user wants a plan or requirements doc challenged for right-sizing rather than
+    correctness.
+  keywords:
+  - scope creep
+  - over-engineered
+  - YAGNI
+  - gold-plating
+  - premature abstraction
+  - complexity bloat
+  - right-sized
+  - unnecessary abstraction
+  - scope alignment
+  - implementation bloat
+  phrasing: Scope/complexity-flavored planning review. Consider `/ce-lite:ce-scope-guardian-reviewer`
+    for a specialist that challenges unjustified abstractions, scope creep, and over-engineering
+    in plans and requirements docs.
+ce-security-lens-reviewer:
+  _rationale: This persona targets architecture and planning documents for pre-implementation
+    security gaps—threat modeling, trust boundaries, and authz decisions—distinctly
+    separate from code-level security review handled by other personas.
+  keywords:
+  - threat model
+  - trust boundary
+  - attack surface
+  - data exposure
+  - design doc
+  - security requirements
+  - PII
+  - access control
+  - credential management
+  phrasing: Plan/design-security flavored. Consider `/ce-lite:ce-security-lens-reviewer`
+    for a planning-level security review covering threat models, trust boundaries,
+    auth/authz gaps, and data exposure in specs or design docs.
+ce-security-reviewer:
+  _rationale: Keywords are drawn exclusively from precise vulnerability terminology
+    a developer invokes only when thinking about exploitable code paths, keeping false-positive
+    overlap with general-purpose or other security personas low.
+  keywords:
+  - SQL injection
+  - XSS
+  - CSRF
+  - SSRF
+  - path traversal
+  - hardcoded secret
+  - privilege escalation
+  - insecure deserialization
+  - OWASP
+  - auth bypass
+  phrasing: Diff touches vulnerability-prone code. Consider `/ce-lite:ce-security-reviewer`
+    for attacker-perspective review covering injection, auth/authz bypasses, hardcoded
+    secrets, SSRF, and path traversal.
+ce-security-sentinel:
+  keywords:
+  - security
+  - vuln
+  - vulnerab
+  - OWASP
+  - injection
+  - XSS
+  - CSRF
+  - SSRF
+  - 'auth '
+  - auth-
+  - JWT
+  - OAuth
+  - mass assignment
+  - sanitiz
+  - hardcoded secret
+  - credential leak
+  - open redirect
+  - deserialization
+  - is this safe
+  - paranoid review
+  - is it safe to ship
+  - before we ship
+  phrasing: 'The prompt looks security-flavored. Consider running `/ce-lite:ce-ask-security-sentinel`
+    (or invoking the wrapper via Skill) for a focused security review by a specialist
+    persona. The wrapper dispatches a sub-agent grounded in OWASP / injection / authn-authz
+    / secrets-handling expertise.
+
+    '
+ce-session-historian:
+  _rationale: Keywords signal the user wants institutional memory mined from previous
+    coding-agent sessions — a pattern that requires the ce-sessions orchestrator to
+    run discovery and extraction before the historian can synthesize prose findings.
+  keywords:
+  - prior session
+  - previous session
+  - session history
+  - past sessions
+  - earlier sessions
+  - already tried
+  - tried before
+  - prior attempts
+  - what didn't work
+  - session findings
+  phrasing: Prompt looks session-history-flavored. Consider `/ce-lite:ce-sessions`
+    for synthesizing findings, failed attempts, and key decisions from prior Claude
+    Code / Codex / Cursor sessions on this problem.
+ce-slack-researcher:
+  _rationale: Keywords lead with high-precision Slack-explicit phrases (catching direct
+    lookup requests) then broaden to organizational-context signals that distinguish
+    this persona from codebase/docs research personas.
+  keywords:
+  - search slack
+  - check slack
+  - slack channel
+  - slack history
+  - slack discussions
+  - team discussed
+  - organizational context
+  - what was decided
+  - undocumented
+  - prior discussions
+  phrasing: Slack-research-flavored prompt. Consider `/ce-lite:ce-slack-researcher`
+    for surfacing team decisions, constraints & undocumented org context from Slack
+    channels.
+ce-spec-flow-analyzer:
+  _rationale: Keywords target the distinctive vocabulary of requirements and user
+    flow analysis—terms users reach for when discussing PRDs, journey coverage, and
+    path completeness—minimizing false positives from generic implementation prompts.
+  keywords:
+  - happy path
+  - unhappy path
+  - user flow
+  - acceptance criteria
+  - user journey
+  - requirements gap
+  - feature spec
+  - PRD
+  - spec gaps
+  - missing scenarios
+  phrasing: Spec/flow analysis flavor detected. Consider `/ce-lite:ce-spec-flow-analyzer`
+    for user flow mapping, gap identification, and edge case discovery across specs
+    and feature descriptions before implementation begins.
+ce-swift-ios-reviewer:
+  _rationale: Keywords target Swift-specific property wrappers, Apple framework names,
+    and iOS build-artifact types (entitlements, .pbxproj, privacy manifest) that appear
+    almost exclusively in iOS/macOS codebases, keeping false-positive rates low across
+    other personas.
+  keywords:
+  - SwiftUI
+  - '@StateObject'
+  - '@ObservedObject'
+  - Core Data
+  - .pbxproj
+  - privacy manifest
+  - entitlements
+  - '@Published'
+  - storyboard
+  - view invalidation
+  phrasing: Swift/iOS-flavored prompt. Consider `/ce-lite:ce-swift-ios-reviewer` for
+    SwiftUI state management, Swift concurrency, Core Data threading, and memory safety
+    review by a senior iOS engineer.
+ce-testing-reviewer:
+  _rationale: Keywords target test-architecture pain points — coverage gaps, assertion
+    quality, coupling, and path coverage — that are distinctively this persona's domain
+    and unlikely to collide with security, performance, or general code-quality reviewers.
+  keywords:
+  - brittle tests
+  - false confidence
+  - coverage gaps
+  - weak assertions
+  - happy path
+  - implementation details
+  - snapshot tests
+  - sad path
+  - untested branch
+  - branch coverage
+  phrasing: Prompt looks test-quality-flavored. Consider `/ce-lite:ce-testing-reviewer`
+    for specialist review of coverage gaps, weak assertions, and brittle implementation-coupled
+    tests.
+ce-web-researcher:
+  _rationale: This persona is the right tool when the user's prompt requires knowledge
+    outside the codebase — prior art, market signals, competitor patterns, or cross-domain
+    analogies — and would otherwise be handled by ad-hoc manual web searches.
+  keywords:
+  - prior art
+  - competitor patterns
+  - cross-domain analogies
+  - market signals
+  - competitive analysis
+  - industry landscape
+  - adjacent solutions
+  - ecosystem survey
+  - what have others done
+  - external grounding
+  phrasing: Prompt looks research-flavored. Consider `/ce-lite:ce-web-researcher`
+    for structured iterative web research — prior art, competitor patterns, market
+    signals, and cross-domain analogies from external sources.

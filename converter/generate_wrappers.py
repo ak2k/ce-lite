@@ -61,9 +61,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 CONDITIONAL_PREFIX_RE = re.compile(
     r"^Conditional\s+[a-z][a-z\-/]*\s+persona,\s+selected\s+when\s+",
@@ -115,65 +119,30 @@ def load_manifest(dist: Path) -> list[Persona]:
 def load_overrides(converter_dir: Path) -> dict[str, str]:
     """Load overrides/persona-descriptions.yaml as a flat name→description map.
 
-    Format (light-touch YAML, no nesting):
-
-        ce-security-sentinel: |
-          Use when reviewing for security issues...
-        ce-architecture-strategist: "Use when ..."
-
-    Empty file or missing file returns {}. Keep the parser deliberately
-    minimal — overrides are populated by skill-creator and committed to
-    the repo, not edited at scale by hand.
+    Empty / missing file returns {}.
     """
     overrides_path = converter_dir / "overrides" / "persona-descriptions.yaml"
     if not overrides_path.is_file():
         return {}
-    text = overrides_path.read_text(encoding="utf-8")
-    result: dict[str, str] = {}
-    current_key: str | None = None
-    current_val: list[str] = []
-    block_indent: int | None = None
-    for raw_line in text.splitlines():
-        # Skip pure comments / blank lines at top level.
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            if current_key is None:
-                continue
-        # Top-level key (no leading whitespace, has colon).
-        if raw_line and not raw_line[0].isspace() and ":" in raw_line:
-            # Flush previous key.
-            if current_key is not None:
-                result[current_key] = "\n".join(current_val).rstrip()
-                current_val = []
-                block_indent = None
-            key, _, value = raw_line.partition(":")
-            current_key = key.strip()
-            value = value.strip()
-            if value in ("|", ">", "|-", ">-"):
-                # Block scalar follows on indented lines.
-                continue
-            if value:
-                # Inline scalar; strip optional quotes.
-                if (value.startswith('"') and value.endswith('"')) or (
-                    value.startswith("'") and value.endswith("'")
-                ):
-                    value = value[1:-1]
-                result[current_key] = value
-                current_key = None
-                current_val = []
-                block_indent = None
-            continue
-        # Indented continuation of a block scalar.
-        if current_key is not None and raw_line and raw_line[0].isspace():
-            # Establish block indent on first content line.
-            indent = len(raw_line) - len(raw_line.lstrip())
-            if block_indent is None:
-                block_indent = indent
-            # Strip the common indent.
-            current_val.append(raw_line[block_indent:])
-    if current_key is not None:
-        result[current_key] = "\n".join(current_val).rstrip()
-    return result
+    raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(raw, dict):
+        return {}
+    # PyYAML preserves the trailing newline ending a block scalar; descriptions
+    # shouldn't carry trailing whitespace into the generated SKILL.md frontmatter.
+    return {k: v.rstrip() if isinstance(v, str) else "" for k, v in raw.items()}
+
+
+def load_keyword_overrides(converter_dir: Path) -> dict[str, dict]:
+    """Load overrides/persona-keywords.yaml → {persona_name: {keywords?, phrasing?}}.
+
+    Pass B output. Each persona may override `keywords` (list[str]) and/or
+    `phrasing` (str). Anything not listed keeps the Pass A defaults.
+    """
+    overrides_path = converter_dir / "overrides" / "persona-keywords.yaml"
+    if not overrides_path.is_file():
+        return {}
+    raw = yaml.safe_load(overrides_path.read_text(encoding="utf-8")) or {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def wrapper_name(persona_name: str) -> str:
@@ -327,113 +296,396 @@ META_SKILL_DESCRIPTION = (
 )
 
 
-DEFAULT_HOOK_RULES = {
-    "config": {
-        "haiku_classifier": {
-            "enabled": False,
-            "model": "haiku",
-            "max_budget_usd": 0.005,
-            "timeout_seconds": 8,
-            "min_confidence": 0.6,
-            "_doc": (
-                "Optional Haiku-based intent classifier. When enabled, the "
-                "hook falls back to a Haiku call if keyword matching produces "
-                "no hit. Haiku reads the user prompt + persona catalog and "
-                "returns a structured suggestion. Adds ~1–2s latency per "
-                "non-keyword-matching prompt and ~$0.001 quota each. Set "
-                "enabled=true to opt in. The keyword path always runs first "
-                "(cheap and deterministic); Haiku is the no-keyword "
-                "fallback only."
-            ),
-        }
-    },
-    "rules": [
-        {
-            "keywords": [
-                "security", "vuln", "vulnerab", "OWASP", "injection", "XSS",
-                "CSRF", "SSRF", "auth ", "auth-", "JWT", "OAuth",
-                "mass assignment", "sanitiz", "hardcoded secret", "credential leak",
-                "open redirect", "deserialization", "is this safe",
-                "paranoid review", "is it safe to ship", "before we ship",
-            ],
-            "persona": "ce-security-sentinel",
-            "phrasing": (
-                "The prompt looks security-flavored. Consider running "
-                "`/ce-lite:ce-ask-security-sentinel` (or invoking the wrapper "
-                "via Skill) for a focused security review by a specialist "
-                "persona. The wrapper dispatches a sub-agent grounded in "
-                "OWASP / injection / authn-authz / secrets-handling expertise."
-            ),
-        },
-        {
-            "keywords": [
-                "factor out", "extract method", "extract class", "duplicat",
-                "copy-pasted", "DRY", "coupling", "abstraction", "boundaries",
-                "structural refactor", "service boundaries", "module bound",
-                "pattern compliance", "design integrity",
-            ],
-            "persona": "ce-architecture-strategist",
-            "phrasing": (
-                "Architecture/design concerns visible. Consider "
-                "`/ce-lite:ce-ask-architecture-strategist` for a structural "
-                "review (pattern compliance, layer violations, naming "
-                "consistency)."
-            ),
-        },
-        {
-            "keywords": [
-                "YAGNI", "over-engineered", "premature abstraction",
-                "redundant abstraction", "simplify", "simpler way",
-                "is this too clever", "unnecessary indirection",
-                "feels overcomplicated", "could this be simpler",
-            ],
-            "persona": "ce-code-simplicity-reviewer",
-            "phrasing": (
-                "Simplicity concerns visible. Consider "
-                "`/ce-lite:ce-ask-code-simplicity-reviewer` for a YAGNI/"
-                "redundancy review."
-            ),
-        },
-        {
-            "keywords": [
-                "edge case", "off-by-one", "race condition", "deadlock",
-                "concurrency bug", "correctness", "logic bug",
-                "is this correct", "boundary condition",
-            ],
-            "persona": "ce-correctness-reviewer",
-            "phrasing": (
-                "Correctness concerns visible. Consider "
-                "`/ce-lite:ce-ask-correctness-reviewer` for an edge-case / "
-                "boundary-condition review."
-            ),
-        },
-        {
-            "keywords": [
-                "naming consistency", "convention drift", "style consistency",
-                "naming pattern", "matches existing", "consistent with",
-                "follow the pattern",
-            ],
-            "persona": "ce-pattern-recognition-specialist",
-            "phrasing": (
-                "Pattern/consistency review may help. Consider "
-                "`/ce-lite:ce-ask-pattern-recognition-specialist` to surface "
-                "duplication and convention drift."
-            ),
-        },
-        {
-            "keywords": [
-                "performance", "latency", "bottleneck", "slow query",
-                "N+1", "p99", "throughput", "memory pressure",
-            ],
-            "persona": "ce-performance-oracle",
-            "phrasing": (
-                "Performance angle visible. Consider "
-                "`/ce-lite:ce-ask-performance-oracle` for a structured "
-                "performance review."
-            ),
-        },
-    ]
+HAIKU_CONFIG = {
+    "haiku_classifier": {
+        "enabled": False,
+        "model": "haiku",
+        "max_budget_usd": 0.005,
+        "timeout_seconds": 8,
+        "min_confidence": 0.6,
+        "_doc": (
+            "Optional Haiku-based intent classifier. When enabled, the "
+            "hook falls back to a Haiku call if keyword matching produces "
+            "no hit. Haiku reads the user prompt + persona catalog and "
+            "returns a structured suggestion. Adds ~1–2s latency per "
+            "non-keyword-matching prompt and ~$0.001 quota each. Set "
+            "enabled=true to opt in. The keyword path always runs first "
+            "(cheap and deterministic); Haiku is the no-keyword "
+            "fallback only."
+        ),
+    }
 }
+
+
+# Stopword set for Pass A keyword extraction.
+#
+# Two categories:
+#   1. English function words (a, the, is, of, ...) — would never be useful
+#      keywords because they appear in nearly every prompt.
+#   2. Code-review meta-language (code, review, check, analyze, verify,
+#      specialist, persona, ...) — appears across many descriptions AND
+#      across many user prompts. If kept as keywords, every persona rule
+#      fires on every prompt and the hook becomes noise.
+#
+# This is the static defence. The adaptive defence (_compute_too_generic)
+# catches corpus-level drift as upstream adds personas.
+STOPWORDS: set[str] = {
+    # English function words
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "in",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "so",
+    "such",
+    "than",
+    "that",
+    "the",
+    "their",
+    "them",
+    "these",
+    "this",
+    "to",
+    "with",
+    "without",
+    "you",
+    "your",
+    "if",
+    "no",
+    "not",
+    "but",
+    "into",
+    "out",
+    "up",
+    "down",
+    "over",
+    "under",
+    "across",
+    "between",
+    "during",
+    "above",
+    "below",
+    "before",
+    "after",
+    "off",
+    # Code-review meta-verbs (would fire on almost every prompt)
+    "code",
+    "codes",
+    "review",
+    "reviews",
+    "reviewing",
+    "check",
+    "checks",
+    "checking",
+    "checker",
+    "analyze",
+    "analyzes",
+    "analyzing",
+    "analysis",
+    "evaluate",
+    "evaluates",
+    "evaluation",
+    "examine",
+    "examines",
+    "consider",
+    "considering",
+    "ensure",
+    "ensures",
+    "ensuring",
+    "verify",
+    "verifies",
+    "verification",
+    "validate",
+    "validates",
+    "detect",
+    "detects",
+    "detection",
+    "identify",
+    "identifies",
+    # "Use when ..." prefix language and similar meta-framing
+    "use",
+    "uses",
+    "used",
+    "using",
+    "when",
+    "where",
+    "which",
+    # Generic role nouns (the description usually has them — keep them
+    # out so they don't fire as keywords)
+    "specialist",
+    "persona",
+    "expert",
+    "agent",
+    "reviewer",
+    "researcher",
+    "analyst",
+    "analyzer",
+    "strategist",
+    "guardian",
+    "sentinel",
+    "oracle",
+    "writer",
+    "hunter",
+    "iterator",
+    "resolver",
+    "detector",
+    "historian",
+    # Modal qualifiers
+    "any",
+    "all",
+    "every",
+    "some",
+    "may",
+    "might",
+    "should",
+    "must",
+    "can",
+    "would",
+    "could",
+    "will",
+    "shall",
+    # Pronouns
+    "i",
+    "we",
+    "they",
+    "he",
+    "she",
+    "her",
+    "his",
+    "our",
+    "us",
+    "me",
+    # Common adverbs / quantifiers
+    "very",
+    "much",
+    "more",
+    "less",
+    "most",
+    "least",
+    "well",
+    "also",
+    "still",
+    "yet",
+    "already",
+    "again",
+    "further",
+    # Verbs that imply review meta-process
+    "fix",
+    "fixes",
+    "fixed",
+    "fixing",
+    "report",
+    "reports",
+    "reporting",
+    "surface",
+    "surfaces",
+    "surfacing",
+    # Connective / common adjectives
+    "real",
+    "good",
+    "bad",
+    "specific",
+    "general",
+    "different",
+    "same",
+    "new",
+    "old",
+    "current",
+    "future",
+    "past",
+    "given",
+    "common",
+    "based",
+    "across",
+    # Light connectors
+    "then",
+    "another",
+    "other",
+    "those",
+    "each",
+    "either",
+    "neither",
+    # Top-of-prompt addressing
+    "please",
+    "help",
+    # The plugin's own prefix (often appears in descriptions of orchestrators
+    # that delegate to other ce-* personas)
+    "ce",
+}
+
+
+# Persona-role suffixes — stripped from the persona name to expose the
+# distinguishing topic tokens. Mirrors converter/DISPATCH_PATTERNS.py
+# (cannot import from there: this is the suffix-stripping use, that one
+# is the regex-detection use; coupling them risks accidental drift).
+_NAME_SUFFIXES_TO_STRIP: tuple[str, ...] = (
+    "reviewer",
+    "researcher",
+    "analyst",
+    "analyzer",
+    "expert",
+    "specialist",
+    "strategist",
+    "guardian",
+    "sentinel",
+    "oracle",
+    "writer",
+    "hunter",
+    "iterator",
+    "resolver",
+    "agent",
+    "detector",
+    "historian",
+    "sync",
+)
+
+
+_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'-]+")
+_ACRONYM_RE = re.compile(r"\b[A-Z]{3,}\b")
+
+
+def _tokenize(text: str) -> list[str]:
+    """Tokenize description text. Returns lowercase content tokens."""
+    return [t.lower() for t in _TOKEN_RE.findall(text)]
+
+
+def _find_acronyms(text: str) -> set[str]:
+    """Return ALL-CAPS tokens of ≥3 chars, preserving original casing.
+
+    Used to keep "OWASP", "JWT", "CSRF" uppercase in keyword output instead
+    of lowercasing during tokenization. The matcher is case-insensitive so
+    behavior is identical; cosmetic gain in the generated rules file.
+    """
+    return set(_ACRONYM_RE.findall(text))
+
+
+def _compute_too_generic(descriptions: list[str], threshold: float = 0.20) -> set[str]:
+    """Identify tokens appearing in >threshold fraction of descriptions.
+
+    Adaptive complement to STOPWORDS — catches corpus-level generic terms
+    that aren't in the static list. Threshold default 0.20 means a token
+    appearing in >9/49 personas (>20%) gets flagged.
+    """
+    df: Counter[str] = Counter()
+    for d in descriptions:
+        df.update(set(_tokenize(d)) - STOPWORDS)
+    n = max(len(descriptions), 1)
+    return {w for w, c in df.items() if c / n > threshold}
+
+
+_CLAUSE_SPLIT_RE = re.compile(r"[.,;:!?]+|—|–")
+
+
+def _consecutive_bigrams(text: str, drop: set[str]) -> list[str]:
+    """Extract bigrams of two adjacent content words from the original text.
+
+    Respects clause boundaries (period, comma, semicolon, colon, em/en-dash):
+    "test coverage gaps, weak assertions" produces "test coverage" and
+    "weak assertions" — never the cross-clause "gaps weak". Hyphens are
+    kept inside tokens by _tokenize so compound words ("agent-native",
+    "off-by-one") survive intact.
+
+    Higher precision than singletons: "data migration" fires on the
+    phrase; "data" alone fires on any DB-related prompt.
+    """
+    out: list[str] = []
+    for chunk in _CLAUSE_SPLIT_RE.split(text):
+        tokens = _tokenize(chunk)
+        for a, b in zip(tokens, tokens[1:]):
+            if a not in drop and b not in drop:
+                out.append(f"{a} {b}")
+    return out
+
+
+def _derive_name_keywords(persona_name: str) -> list[str]:
+    """Strip ce- prefix + role suffix; remaining tokens are high-precision."""
+    bare = persona_name[3:] if persona_name.startswith("ce-") else persona_name
+    parts = bare.split("-")
+    while parts and parts[-1] in _NAME_SUFFIXES_TO_STRIP:
+        parts.pop()
+    if not parts:
+        return []
+    phrase = " ".join(parts)
+    out = [phrase]
+    last = parts[-1]
+    # English regular-plural singularization
+    if len(last) > 4 and last.endswith("s") and not last.endswith("ss"):
+        out.append(" ".join(parts[:-1] + [last[:-1]]))
+    return out
+
+
+def derive_keyword_rule(
+    persona: Persona,
+    too_generic: set[str],
+    acronyms_by_persona: dict[str, set[str]],
+) -> dict:
+    """Pass A: derive a baseline hook rule from manifest description + name.
+
+    The output dict matches a skill-rules.json rule entry. Combines:
+      bigrams (highest precision) → name-derived keywords → singletons.
+    Caps at 10 keywords. Restores acronym casing (OWASP, CSRF) where
+    applicable. Phrasing is a template; Pass B overrides supply richer
+    per-persona phrasing where curated.
+    """
+    desc = persona.description
+    drop = STOPWORDS | too_generic
+    acronyms = acronyms_by_persona.get(persona.name, set())
+    acronym_lookup = {a.lower(): a for a in acronyms}
+
+    def restore(tok: str) -> str:
+        return acronym_lookup.get(tok, tok)
+
+    bigrams_raw = _consecutive_bigrams(desc, drop)
+    singletons_raw = [t for t in _tokenize(desc) if t not in drop]
+    name_keywords = _derive_name_keywords(persona.name)
+
+    bigrams = [" ".join(restore(t) for t in b.split(" ")) for b in bigrams_raw]
+    # Short singletons substring-match too aggressively ("user" hits "users.py",
+    # "auth" hits "author", "data" hits "metadata"). Require ≥6 chars unless
+    # the token is an all-uppercase acronym (OWASP, JWT, CSRF) — those are
+    # intentional. Bigrams and name-keywords are exempt because they're
+    # already higher-precision by construction.
+    singletons = [restore(t) for t in singletons_raw if len(t) >= 6 or t.isupper()]
+
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for kw in bigrams + name_keywords + singletons:
+        kw_stripped = kw.strip()
+        if not kw_stripped or kw_stripped.lower() in seen:
+            continue
+        seen.add(kw_stripped.lower())
+        keywords.append(kw_stripped)
+        if len(keywords) >= 10:
+            break
+
+    if not keywords:
+        bare = persona.name[3:] if persona.name.startswith("ce-") else persona.name
+        keywords = [bare]
+
+    bare = persona.name[3:] if persona.name.startswith("ce-") else persona.name
+    return {
+        "keywords": keywords,
+        "persona": persona.name,
+        "phrasing": (
+            f"The prompt looks {bare}-flavored. Consider running "
+            f"`/ce-lite:{wrapper_name(persona.name)}` for a focused review "
+            f"by the {bare} specialist."
+        ),
+    }
 
 
 def render_meta_skill() -> str:
@@ -517,266 +769,38 @@ def write_meta_skill(dist: Path) -> Path:
 # `ce-lite-persona: <reason>` prefix.
 
 
+_RESOLVER_SOURCE_PATH = Path(__file__).parent / "resources" / "ce-lite-persona"
+
+
 def render_persona_resolver() -> str:
-    """Emit dist/bin/ce-lite-persona — the dispatch resolver shim."""
-    return '''#!/usr/bin/env python3
-"""ce-lite-persona — resolve a persona name to its prompt file or body.
+    """Read the resolver source. Preserved for tests that assert against content.
 
-Generated by ce-lite converter (converter/generate_wrappers.py).
-Don't edit; regenerate from the converter.
-
-The plugin's `bin/` is on PATH because Claude Code exports it for installed
-plugins, so dispatch sites in skill bodies invoke this directly:
-
-    ce-lite-persona ce-security-sentinel --prefix [--via ce-code-review]
-                                                  # full prompt prefix:
-                                                  # body + trace tag +
-                                                  # tool-restriction preamble.
-                                                  # Concatenate with the task
-                                                  # to form Agent.prompt.
-    ce-lite-persona ce-security-sentinel --body   # bare prompt body only
-    ce-lite-persona ce-security-sentinel --path   # absolute path
-    ce-lite-persona --list                        # tab-separated catalog
-    ce-lite-persona --diagnose                    # install health check
-
-Plugin-root resolution order:
-  1. $CLAUDE_PLUGIN_ROOT if set and contains .claude-plugin/plugin.json.
-  2. Walk up from this script's resolved location.
-
-Persona names accept the canonical form (`ce-security-sentinel`) or the
-bare form (`security-sentinel`).
-
-The task content NEVER passes through argv on a --prefix call — only the
-persona name and dispatch source do. Arbitrary user task content (quotes,
-backticks, dollar signs, newlines) is safe because the caller concatenates
-the resolver's stdout with the task inside the Agent.prompt JSON parameter,
-which bash never sees.
-"""
-from __future__ import annotations
-
-import argparse
-import json
-import os
-import sys
-from pathlib import Path
-
-
-def find_plugin_root() -> Path:
-    env_root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if env_root:
-        root = Path(env_root)
-        if (root / ".claude-plugin" / "plugin.json").is_file():
-            return root
-    here = Path(__file__).resolve().parent
-    for cand in [here, *here.parents]:
-        if (cand / ".claude-plugin" / "plugin.json").is_file():
-            return cand
-    sys.exit(
-        "ce-lite-persona: could not locate plugin root "
-        "(checked $CLAUDE_PLUGIN_ROOT and parents of this script). "
-        "Plugin may not be fully installed."
-    )
-
-
-def load_manifest(root: Path) -> dict:
-    path = root / "references" / "agent-prompts" / "manifest.json"
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: missing manifest at {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        sys.exit(f"ce-lite-persona: malformed manifest at {path}: {exc}")
-
-
-def canonicalize(name: str) -> str:
-    return name if name.startswith("ce-") else f"ce-{name}"
-
-
-def find_persona(manifest: dict, name: str) -> dict:
-    canonical = canonicalize(name)
-    for agent in manifest.get("agents", []):
-        if agent.get("name") == canonical:
-            return agent
-    known = ", ".join(sorted(a["name"] for a in manifest.get("agents", [])))
-    sys.exit(
-        f"ce-lite-persona: unknown persona '{name}'. "
-        f"Known personas: {known}"
-    )
-
-
-def cmd_path(root: Path, persona: dict) -> int:
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(
-            f"ce-lite-persona: prompt file missing: {path} "
-            f"(manifest declares it; partial install?)"
-        )
-    print(path)
-    return 0
-
-
-def cmd_body(root: Path, persona: dict) -> int:
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
-    sys.stdout.write(path.read_text(encoding="utf-8"))
-    return 0
-
-
-# Recognised dispatch sources for --via. Anything outside this set is rejected
-# (typo defence). Keep this list in sync with the wrapper templates that pass
-# --via and the generated meta-skill/panel/orchestrator preambles.
-DISPATCH_SOURCES = {
-    "ce-ask-direct",   # /ce-ask-<persona> wrapper
-    "ce-ask-meta",     # /ce-ask <persona> ...
-    "ce-ask-panel",    # /ce-ask-panel a,b,c ...
-    "ce-code-review",
-    "ce-doc-review",
-    "ce-resolve-pr-feedback",
-}
-
-
-def cmd_prefix(root: Path, persona: dict, via: str) -> int:
-    """Emit the full dispatch prompt prefix: body + trace tag + tool restriction.
-
-    Concatenate this with the user task to form the Agent.prompt parameter.
-    The task never touches argv here (and never touches Bash either when the
-    caller does it via the Agent tool's structured parameter), so there is no
-    shell-quoting risk for arbitrary task content.
+    The build path uses write_persona_resolver() which copies the file directly.
     """
-    if via not in DISPATCH_SOURCES:
-        sys.exit(
-            f"ce-lite-persona: unknown --via dispatch source: '{via}'. "
-            f"Known sources: {', '.join(sorted(DISPATCH_SOURCES))}"
-        )
-    path = root / persona["prompt_path"]
-    if not path.is_file():
-        sys.exit(f"ce-lite-persona: prompt file missing: {path}")
-
-    body = path.read_text(encoding="utf-8").rstrip("\\n")
-    tools = persona.get("tools") or []
-    tools_str = ", ".join(tools) if tools else "any"
-    model = persona.get("model") or "inherit"
-    name = persona["name"]
-
-    preamble = (
-        f"[ce-persona={name} via={via}]\\n"
-        f"\\n"
-        f"You are operating as the {name} specialist. Manifest declares this "
-        f"role uses tools=[{tools_str}] and model={model}. Honour those "
-        f"constraints: if a task pulls you toward tools outside that set, "
-        f"stop and explain why your role requires it — don't silently broaden "
-        f"scope.\\n"
-    )
-
-    sys.stdout.write(body + "\\n\\n" + preamble)
-    return 0
-
-
-def cmd_list(manifest: dict) -> int:
-    for agent in manifest.get("agents", []):
-        desc = (agent.get("description", "") or "").splitlines()
-        first_line = desc[0] if desc else ""
-        sys.stdout.write(f"{agent['name']}\\t{first_line}\\n")
-    return 0
-
-
-def cmd_diagnose(root: Path, manifest: dict) -> int:
-    sys.stdout.write(f"plugin_root: {root}\\n")
-    sys.stdout.write(
-        f"manifest:    {root / 'references' / 'agent-prompts' / 'manifest.json'}\\n"
-    )
-    sys.stdout.write(f"personas:    {len(manifest.get('agents', []))}\\n")
-    missing = [
-        a["name"] for a in manifest.get("agents", [])
-        if not (root / a["prompt_path"]).is_file()
-    ]
-    if missing:
-        sys.stderr.write(
-            f"ce-lite-persona: missing prompt files for: {', '.join(missing)}\\n"
-        )
-        return 1
-    sys.stdout.write("status:      ok\\n")
-    return 0
-
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        prog="ce-lite-persona",
-        description=(
-            "Resolve a ce-lite persona name to its prompt file path or body. "
-            "Invoked from generated SKILL.md dispatch sites and orchestrator "
-            "preambles to avoid the per-dispatch glob/find dance."
-        ),
-    )
-    parser.add_argument(
-        "persona", nargs="?",
-        help="canonical (ce-security-sentinel) or bare (security-sentinel) name",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--path", action="store_true",
-        help="print absolute path to the persona's prompt file",
-    )
-    group.add_argument(
-        "--body", action="store_true",
-        help="cat the prompt file contents to stdout (default)",
-    )
-    group.add_argument(
-        "--prefix", action="store_true",
-        help=(
-            "emit the full dispatch prompt prefix (body + trace tag + "
-            "tool-restriction preamble), ready to concatenate with the task. "
-            "Use with --via to record the dispatch source in the trace tag."
-        ),
-    )
-    group.add_argument(
-        "--list", action="store_true", dest="list_all",
-        help="list all available personas (name<TAB>description)",
-    )
-    group.add_argument(
-        "--diagnose", action="store_true",
-        help="print plugin root, manifest path, and per-persona prompt presence",
-    )
-    parser.add_argument(
-        "--via", default="ce-ask-direct",
-        help=(
-            "dispatch source recorded in the [ce-persona=NAME via=SOURCE] "
-            "trace tag emitted by --prefix. Defaults to ce-ask-direct."
-        ),
-    )
-    args = parser.parse_args(argv)
-
-    root = find_plugin_root()
-    manifest = load_manifest(root)
-
-    if args.list_all:
-        return cmd_list(manifest)
-    if args.diagnose:
-        return cmd_diagnose(root, manifest)
-    if not args.persona:
-        parser.error(
-            "persona name required unless --list or --diagnose is given"
-        )
-    persona = find_persona(manifest, args.persona)
-    if args.path:
-        return cmd_path(root, persona)
-    if args.prefix:
-        return cmd_prefix(root, persona, args.via)
-    return cmd_body(root, persona)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
-'''
+    if not _RESOLVER_SOURCE_PATH.is_file():
+        raise FileNotFoundError(f"missing resolver source at {_RESOLVER_SOURCE_PATH}")
+    return _RESOLVER_SOURCE_PATH.read_text(encoding="utf-8")
 
 
 def write_persona_resolver(dist: Path) -> Path:
-    """Emit dist/bin/ce-lite-persona, executable."""
+    """Copy converter/resources/ce-lite-persona → dist/bin/ce-lite-persona.
+
+    Resolver source lives at converter/resources/ce-lite-persona as a real
+    Python file (lintable, testable, syntax-highlighted in editors). The
+    generator stamps it into dist/bin/ at build time. Keep that source
+    stdlib-only and free of converter imports — it ships to end-user
+    installs and runs there independently.
+    """
     bin_dir = dist / "bin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     resolver_path = bin_dir / "ce-lite-persona"
-    resolver_path.write_text(render_persona_resolver(), encoding="utf-8")
+    if not _RESOLVER_SOURCE_PATH.is_file():
+        raise FileNotFoundError(
+            f"missing resolver source at {_RESOLVER_SOURCE_PATH} — "
+            "converter/resources/ce-lite-persona must exist for the build to "
+            "stamp it into dist/bin/."
+        )
+    shutil.copy2(_RESOLVER_SOURCE_PATH, resolver_path)
     resolver_path.chmod(0o755)
     return resolver_path
 
@@ -806,293 +830,84 @@ def write_persona_resolver(dist: Path) -> Path:
 
 def render_hook_config() -> str:
     """Emit dist/hooks/hooks.json — Claude Code's hook declaration spec."""
-    return json.dumps({
-        "description": (
-            "ce-lite UserPromptSubmit hook: detect review-flavored prompts and "
-            "suggest invoking the matching specialist persona wrapper. Pure "
-            "keyword matching; no LLM call per prompt; no idle-context cost."
-        ),
-        "hooks": {
-            "UserPromptSubmit": [
-                {
-                    "hooks": [
+    return (
+        json.dumps(
+            {
+                "description": (
+                    "ce-lite UserPromptSubmit hook: detect review-flavored prompts and "
+                    "suggest invoking the matching specialist persona wrapper. Pure "
+                    "keyword matching; no LLM call per prompt; no idle-context cost."
+                ),
+                "hooks": {
+                    "UserPromptSubmit": [
                         {
-                            "type": "command",
-                            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
-                            "timeout": 5,
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/auto_suggest.py",
+                                    "timeout": 5,
+                                }
+                            ]
                         }
                     ]
-                }
-            ]
-        },
-    }, indent=2) + "\n"
+                },
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
 
-def render_hook_rules() -> str:
-    """Emit dist/hooks/skill-rules.json — keyword → persona suggestion table.
+def render_hook_rules(dist: Path | None = None) -> str:
+    """Compute and serialize dist/hooks/skill-rules.json.
 
-    This file is the curated extension point. Each release of the converter
-    can ship updated default rules; downstream users can override by replacing
-    skill-rules.json with their own (any plugin-cache rebuild from upstream
-    overwrites it, so persistent customisation should live in a separate
-    user-level hook). Keywords are case-insensitive substring matches.
+    Two-pass keyword generation:
+      Pass A: derive baseline rule per persona from manifest description +
+              name (see derive_keyword_rule). Deterministic, no LLM.
+      Pass B: per-persona overrides from converter/overrides/persona-keywords.yaml
+              replace keywords and/or phrasing where curated.
+
+    Rules are sorted alphabetically by persona name so the output diff is
+    stable across rebuilds. The runtime hook (auto_suggest.py) reads the
+    keywords case-insensitively and caps suggestions at MAX_SUGGESTIONS.
+
+    `dist` defaults to the in-tree dist/ so tests and direct invocation
+    work without threading a path through every call site.
     """
-    return json.dumps(DEFAULT_HOOK_RULES, indent=2) + "\n"
+    if dist is None:
+        dist = Path(__file__).parent.parent / "dist"
+    personas = load_manifest(dist)
+    descriptions = [p.description for p in personas]
+    too_generic = _compute_too_generic(descriptions)
+    acronyms_by_persona = {p.name: _find_acronyms(p.description) for p in personas}
+    overrides = load_keyword_overrides(Path(__file__).parent)
+
+    rules: list[dict] = []
+    for p in sorted(personas, key=lambda x: x.name):
+        rule = derive_keyword_rule(p, too_generic, acronyms_by_persona)
+        ovr = overrides.get(p.name, {})
+        if "keywords" in ovr:
+            rule["keywords"] = ovr["keywords"]
+        if "phrasing" in ovr:
+            rule["phrasing"] = ovr["phrasing"].strip()
+        rules.append(rule)
+
+    return json.dumps({"config": HAIKU_CONFIG, "rules": rules}, indent=2) + "\n"
+
+
+_HOOK_SCRIPT_SOURCE_PATH = Path(__file__).parent / "resources" / "auto_suggest.py"
 
 
 def render_hook_script() -> str:
-    """Emit dist/hooks/auto_suggest.py — the actual hook implementation.
+    """Read the hook script source. Preserved for tests that assert against content.
 
-    Runs once per user prompt. Reads UserPromptSubmit JSON payload from stdin
-    (Claude Code hook protocol); matches `prompt` text against
-    skill-rules.json keywords (case-insensitive substring); emits an
-    `additionalContext` JSON response that gets prepended to Claude's view of
-    the prompt. No match → silent exit (zero token cost). At most 3 personas
-    suggested per prompt (avoid noise).
-
-    Standard library only — no PyYAML / pyyaml dependency. Fast cold-start
-    (~30 ms python overhead + microseconds of matching).
+    The build path uses write_hooks() which copies the file directly.
     """
-    return '''#!/usr/bin/env python3
-"""ce-lite UserPromptSubmit hook — suggest specialist personas based on prompt content.
-
-Generated by ce-lite converter (converter/generate_wrappers.py). Don't edit;
-regenerate from `skill-rules.json` instead — this script only loads rules
-and config from there at runtime.
-
-Protocol: Claude Code passes the user's prompt as JSON on stdin. If a
-suggestion is warranted, we emit `{"hookSpecificOutput": {"hookEventName":
-"UserPromptSubmit", "additionalContext": "..."}}` on stdout — that text gets
-injected into Claude's view of the prompt as a system reminder before Claude
-responds. Silent exit (no stdout) if nothing matches.
-
-Two suggestion strategies:
-
-  1. Keyword matching (default, always runs first). Substring-matches the
-     prompt against rule keywords. Cheap, deterministic, no API cost.
-
-  2. Haiku intent classifier (opt-in via config.haiku_classifier.enabled).
-     If keyword matching produces no hit AND Haiku is enabled, runs
-     `claude -p --model haiku --json-schema` to classify the prompt's intent
-     against the persona catalog. ~1-2s latency, ~$0.001 quota per
-     no-keyword-match prompt. Per ~/.claude/memory/claude_p_headless_subscription.md
-     we use the lightweight invocation pattern (--system-prompt,
-     --setting-sources "", CLAUDE_CODE_DISABLE_*).
-
-Reference: https://code.claude.com/docs/en/hooks
-"""
-from __future__ import annotations
-
-import json
-import os
-import shutil
-import subprocess
-import sys
-from pathlib import Path
-
-_GENERATED_BY = "ce-lite converter"
-
-RULES_PATH = Path(__file__).parent / "skill-rules.json"
-MAX_SUGGESTIONS = 3  # cap injected text length on prompts that match many rules
-
-
-def _load_config_and_rules() -> tuple[dict, list[dict]]:
-    if not RULES_PATH.is_file():
-        return {}, []
-    try:
-        data = json.loads(RULES_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}, []
-    if not isinstance(data, dict):
-        return {}, []
-    config = data.get("config") if isinstance(data.get("config"), dict) else {}
-    rules = data.get("rules") if isinstance(data.get("rules"), list) else []
-    return config, rules
-
-
-def _matches(prompt_lower: str, keywords: list[str]) -> bool:
-    return any(
-        isinstance(kw, str) and kw.lower() in prompt_lower
-        for kw in keywords
-    )
-
-
-def _keyword_suggestions(rules: list[dict], prompt_lower: str) -> list[dict]:
-    """Return the matching rules (in declaration order, capped at MAX_SUGGESTIONS)."""
-    matched: list[dict] = []
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        keywords = rule.get("keywords") or []
-        if _matches(prompt_lower, keywords):
-            matched.append(rule)
-        if len(matched) >= MAX_SUGGESTIONS:
-            break
-    return matched
-
-
-def _haiku_classify(prompt: str, rules: list[dict], cfg: dict) -> dict | None:
-    """Optional fallback: run Haiku via `claude -p` to suggest a persona.
-
-    Returns a synthetic rule-shaped dict (with `persona` and `phrasing`) if
-    Haiku returns a confident classification. Returns None on any failure
-    (network, quota, malformed output, low confidence) — caller treats
-    that as "no suggestion."
-
-    Uses the lightweight subscription-quota invocation pattern: minimal
-    system prompt, no auto-memory, no settings hierarchy, JSON-schema
-    constrained output, hard budget cap. See
-    ~/.claude/memory/claude_p_headless_subscription.md.
-    """
-    if not cfg.get("enabled"):
-        return None
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
-        return None
-
-    catalog_lines = []
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        persona = rule.get("persona")
-        if persona:
-            keywords = rule.get("keywords") or []
-            kw_summary = ", ".join(keywords[:6])
-            catalog_lines.append(f"- {persona}: {kw_summary}")
-    if not catalog_lines:
-        return None
-    catalog = "\\n".join(catalog_lines)
-
-    system = (
-        "You are a routing classifier for ce-lite specialist personas. The "
-        "user submitted a prompt to a coding assistant. Decide if any "
-        "specialist persona below would substantively improve the response "
-        "(by providing focused expertise the main agent might miss). Return "
-        "one persona name with a confidence 0.0-1.0, OR null if no "
-        "specialist clearly fits.\\n\\nAvailable personas (name: keywords):\\n"
-        + catalog
-    )
-    schema = {
-        "type": "object",
-        "properties": {
-            "persona": {"type": ["string", "null"]},
-            "confidence": {"type": "number"},
-            "reason": {"type": "string"},
-        },
-        "required": ["persona", "confidence"],
-    }
-
-    cmd = [
-        claude_bin, "-p", prompt,
-        "--model", str(cfg.get("model", "haiku")),
-        "--output-format", "json",
-        "--no-session-persistence",
-        "--disable-slash-commands",
-        "--setting-sources", "",
-        "--system-prompt", system,
-        "--json-schema", json.dumps(schema),
-        "--max-budget-usd", str(cfg.get("max_budget_usd", 0.005)),
-    ]
-    env = {**os.environ}
-    env.pop("CLAUDECODE", None)
-    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
-    env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"] = "1"
-    env["CLAUDE_CODE_DISABLE_CRON"] = "1"
-
-    timeout_s = float(cfg.get("timeout_seconds", 8))
-    try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, env=env, timeout=timeout_s,
+    if not _HOOK_SCRIPT_SOURCE_PATH.is_file():
+        raise FileNotFoundError(
+            f"missing hook script source at {_HOOK_SCRIPT_SOURCE_PATH}"
         )
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    if proc.returncode != 0:
-        return None
-
-    try:
-        envelope = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return None
-    structured = envelope.get("structured_output") if isinstance(envelope, dict) else None
-    if not isinstance(structured, dict):
-        return None
-    persona = structured.get("persona")
-    confidence = structured.get("confidence")
-    if not persona or not isinstance(confidence, (int, float)):
-        return None
-    min_conf = float(cfg.get("min_confidence", 0.6))
-    if confidence < min_conf:
-        return None
-
-    # Map persona back to its rule for the phrasing (preferred — matches the
-    # tone of keyword suggestions). Fall back to a synthesized phrasing.
-    for rule in rules:
-        if isinstance(rule, dict) and rule.get("persona") == persona:
-            return rule
-    return {
-        "persona": persona,
-        "phrasing": (
-            f"Haiku intent classifier suggests `/ce-lite:ce-ask-{persona[3:]}` "
-            f"(confidence {confidence:.2f}): {structured.get('reason', '')}"
-        ),
-    }
-
-
-def main() -> int:
-    try:
-        payload = json.load(sys.stdin)
-    except (OSError, json.JSONDecodeError):
-        return 0
-
-    user_prompt = payload.get("prompt") if isinstance(payload, dict) else None
-    if not isinstance(user_prompt, str) or not user_prompt.strip():
-        return 0
-
-    config, rules = _load_config_and_rules()
-    if not rules:
-        return 0
-
-    matched = _keyword_suggestions(rules, user_prompt.lower())
-
-    # Fallback: if no keyword match, optionally run Haiku classifier.
-    if not matched:
-        haiku_cfg = config.get("haiku_classifier", {}) if isinstance(config, dict) else {}
-        haiku_match = _haiku_classify(user_prompt, rules, haiku_cfg)
-        if haiku_match is not None:
-            matched = [haiku_match]
-
-    if not matched:
-        return 0
-
-    suggestions = "\\n".join(
-        f"- {rule.get('phrasing', '').strip()}"
-        for rule in matched[:MAX_SUGGESTIONS]
-        if rule.get("phrasing")
-    )
-    if not suggestions:
-        return 0
-
-    response = {
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": (
-                "[ce-lite auto-suggest] Based on the prompt content, ce-lite "
-                "specialist personas may be relevant:\\n"
-                + suggestions
-                + "\\nThese dispatch a sub-agent grounded in the persona's "
-                "domain expertise — invoke as a slash command for an "
-                "independent specialist perspective. (Suggestions only; the "
-                "main agent can also handle the work directly if appropriate.)"
-            ),
-        }
-    }
-    json.dump(response, sys.stdout)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-'''
+    return _HOOK_SCRIPT_SOURCE_PATH.read_text(encoding="utf-8")
 
 
 def write_hooks(dist: Path) -> list[Path]:
@@ -1105,7 +920,12 @@ def write_hooks(dist: Path) -> list[Path]:
 
     config_path.write_text(render_hook_config(), encoding="utf-8")
     rules_path.write_text(render_hook_rules(), encoding="utf-8")
-    script_path.write_text(render_hook_script(), encoding="utf-8")
+    if not _HOOK_SCRIPT_SOURCE_PATH.is_file():
+        raise FileNotFoundError(
+            f"missing hook script source at {_HOOK_SCRIPT_SOURCE_PATH} — "
+            "converter/resources/auto_suggest.py must exist for the build."
+        )
+    shutil.copy2(_HOOK_SCRIPT_SOURCE_PATH, script_path)
     # Make script executable (UserPromptSubmit hook spec uses it as a command)
     script_path.chmod(0o755)
     return [config_path, rules_path, script_path]
@@ -1118,7 +938,9 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
         return 2
 
     converter_dir = (
-        Path(converter_arg).resolve() if converter_arg else Path(__file__).resolve().parent
+        Path(converter_arg).resolve()
+        if converter_arg
+        else Path(__file__).resolve().parent
     )
 
     personas = load_manifest(dist)
@@ -1127,7 +949,9 @@ def main(dist_arg: str, converter_arg: str | None = None) -> int:
     used_overrides = 0
     written: list[Path] = []
     for persona in personas:
-        description = overrides.get(persona.name, passA_description(persona.description))
+        description = overrides.get(
+            persona.name, passA_description(persona.description)
+        )
         if persona.name in overrides:
             used_overrides += 1
         written.append(write_wrapper(dist, persona, description))

@@ -34,10 +34,16 @@ No manual version-field editing is needed — the suffix is git-derived.
 ## Adding a new dispatch source for the resolver
 
 `ce-lite-persona --via <source>` validates `source` against
-`DISPATCH_SOURCES` (a closed set in `generate_wrappers.render_persona_resolver`).
+`DISPATCH_SOURCES` (a closed set in `converter/resources/ce-lite-persona`).
 When you add a new orchestrator that dispatches personas, add its name to
 that set in the same PR. The resolver fails loud on unknown `--via` values,
 so a missing entry surfaces at first runtime, not silently.
+
+The resolver shim is a real Python source file at
+`converter/resources/ce-lite-persona` — lintable, testable, syntax-
+highlighted in editors. The build (`generate_wrappers.write_persona_resolver`)
+copies it into `dist/bin/` verbatim. Keep it stdlib-only and free of
+converter imports; it ships to end-user installs and runs independently.
 
 ## Upstream-drift detector
 

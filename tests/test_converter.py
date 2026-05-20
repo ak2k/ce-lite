@@ -115,7 +115,7 @@ def test_agent_reference_matches_real_names(name):
 @pytest.mark.parametrize(
     "non_agent",
     [
-        "ce-code-review",   # skill, not agent (no persona suffix)
+        "ce-code-review",  # skill, not agent (no persona suffix)
         "ce-brainstorm",
         "ce-plan",
         "ce-work",
@@ -123,9 +123,9 @@ def test_agent_reference_matches_real_names(name):
         "ce-setup",
         "ce-debug",
         "ce-commit",
-        "the-reviewer",     # missing ce- prefix
+        "the-reviewer",  # missing ce- prefix
         "reviewer",
-        "ce-",              # too short
+        "ce-",  # too short
     ],
 )
 def test_agent_reference_does_not_match_non_agents(non_agent):
@@ -147,13 +147,7 @@ def test_agent_reference_greedy_in_compound_name():
 
 def test_agent_reference_word_boundary():
     """Pattern must respect word boundaries to avoid partial matches."""
-    text = "prefix-ce-security-reviewer-suffix"
-    # `\b` won't match between `-` and alphanumerics-the-same-way as we expect:
-    # `\b` matches between word char and non-word char. Both `-` and letters
-    # straddle that boundary, so `prefix-ce-security-reviewer-suffix` SHOULD
-    # NOT match because `-suffix` extends past `reviewer\b`.
-    matches = AGENT_REFERENCE_RE.findall(text)
-    # Actually `\b` matches at letter↔dash transitions, so `ce-security-reviewer`
+    # `\b` matches at letter↔dash transitions, so `ce-security-reviewer`
     # would match because there's a word boundary at end of `reviewer` (letter)
     # and start of `-` (non-word). Test the realistic case: name in prose.
     text2 = "When dispatching `ce-security-reviewer`, pass diff context."
@@ -222,7 +216,6 @@ def test_find_plugin_root_missing(tmp_path: Path):
 # -------- generate_wrappers (Tier 3) --------
 
 from generate_wrappers import (  # noqa: E402
-    CONDITIONAL_PREFIX_RE,
     Persona,
     load_overrides,
     passA_description,
@@ -234,7 +227,9 @@ from generate_wrappers import (  # noqa: E402
 def test_wrapper_name_strips_ce_prefix():
     """ce-X-reviewer -> ce-ask-X-reviewer (not ce-ask-ce-X-reviewer)."""
     assert wrapper_name("ce-security-sentinel") == "ce-ask-security-sentinel"
-    assert wrapper_name("ce-architecture-strategist") == "ce-ask-architecture-strategist"
+    assert (
+        wrapper_name("ce-architecture-strategist") == "ce-ask-architecture-strategist"
+    )
 
 
 def test_wrapper_name_passes_through_non_ce():
@@ -365,10 +360,7 @@ def test_load_overrides_block_scalar(tmp_path: Path):
     """Multi-line `key: |\n  body` form for descriptions that span lines."""
     (tmp_path / "overrides").mkdir()
     (tmp_path / "overrides" / "persona-descriptions.yaml").write_text(
-        "ce-x: |\n"
-        "  Use when reviewing X.\n"
-        "  Focuses on Y.\n"
-        "ce-y: inline\n"
+        "ce-x: |\n  Use when reviewing X.\n  Focuses on Y.\nce-y: inline\n"
     )
     out = load_overrides(tmp_path)
     assert out["ce-x"] == "Use when reviewing X.\nFocuses on Y."
@@ -379,9 +371,7 @@ def test_load_overrides_skips_comments(tmp_path: Path):
     """Lines starting with `#` at top level are ignored."""
     (tmp_path / "overrides").mkdir()
     (tmp_path / "overrides" / "persona-descriptions.yaml").write_text(
-        "# header comment\n"
-        "ce-x: value\n"
-        "# trailing comment\n"
+        "# header comment\nce-x: value\n# trailing comment\n"
     )
     assert load_overrides(tmp_path) == {"ce-x": "value"}
 
@@ -398,10 +388,17 @@ def test_render_panel_static_template_ignores_persona_count():
     bump just to update a list Claude can read from manifest.json directly.
     """
     a = render_panel([])
-    b = render_panel([
-        Persona(name="ce-x", description="d", model="inherit", tools=None,
-                prompt_path="references/agent-prompts/ce-x.md"),
-    ])
+    b = render_panel(
+        [
+            Persona(
+                name="ce-x",
+                description="d",
+                model="inherit",
+                tools=None,
+                prompt_path="references/agent-prompts/ce-x.md",
+            ),
+        ]
+    )
     assert a == b
 
 
@@ -426,7 +423,7 @@ def test_render_panel_argument_hint_in_frontmatter():
     """argument-hint surfaces in slash-command UX for users + Claude."""
     out = render_panel([])
     fm_block = out.split("---\n", 2)[1]
-    assert 'argument-hint:' in fm_block
+    assert "argument-hint:" in fm_block
     assert "<persona1>,<persona2>" in fm_block
 
 
@@ -447,10 +444,10 @@ def test_render_panel_description_is_substantive():
 
 # -------- meta-skill ce-ask (Phase B.5) — meta-agent removed in B.7 --------
 
-import json as _json  # local alias to avoid clashing with module-level imports
+import json as _json  # noqa: E402  # local alias to avoid clashing with module-level imports
 
 from generate_wrappers import (  # noqa: E402
-    DEFAULT_HOOK_RULES,
+    HAIKU_CONFIG,
     META_SKILL_DESCRIPTION,
     render_hook_config,
     render_hook_rules,
@@ -518,7 +515,10 @@ def test_three_routing_layers_have_distinct_via_tags():
     resolver. Phase B.10 moved the trace tag emission into the resolver; the
     SKILL.md bodies just pass `--via <source>` to record it."""
     p = Persona(
-        name="ce-x", description="x", model="inherit", tools=None,
+        name="ce-x",
+        description="x",
+        model="inherit",
+        tools=None,
         prompt_path="references/agent-prompts/ce-x.md",
     )
     # Direct wrapper either passes --via ce-ask-direct or relies on the
@@ -608,10 +608,30 @@ def test_hook_script_handles_empty_payload_silently():
     assert "if not isinstance(user_prompt, str)" in src or "not user_prompt" in src
 
 
-def test_default_hook_rules_match_render():
-    """Sanity: the constant DEFAULT_HOOK_RULES is what render_hook_rules emits."""
+def test_render_hook_rules_emits_haiku_config_block():
+    """The config block sources from the HAIKU_CONFIG constant, unchanged."""
     rendered = _json.loads(render_hook_rules())
-    assert rendered == DEFAULT_HOOK_RULES
+    assert rendered["config"] == HAIKU_CONFIG
+
+
+def test_render_hook_rules_covers_all_personas():
+    """Pass A generates a rule per persona in the manifest; Pass B may override
+    keywords/phrasing but doesn't remove rules. Total rule count == persona count."""
+    from generate_wrappers import load_manifest
+
+    rendered = _json.loads(render_hook_rules())
+    personas = load_manifest(Path(__file__).resolve().parent.parent / "dist")
+    assert len(rendered["rules"]) == len(personas), (
+        f"expected one rule per persona; got {len(rendered['rules'])} rules "
+        f"for {len(personas)} personas"
+    )
+    rule_personas = {r["persona"] for r in rendered["rules"]}
+    manifest_personas = {p.name for p in personas}
+    assert rule_personas == manifest_personas, (
+        f"rule personas don't match manifest: "
+        f"missing={manifest_personas - rule_personas}, "
+        f"extra={rule_personas - manifest_personas}"
+    )
 
 
 # -------- hook script live runtime tests (Phase B.7) --------
@@ -621,8 +641,8 @@ def test_default_hook_rules_match_render():
 # assert on output JSON — catching regressions in the runtime behaviour
 # (parsing, matching, error handling) that source-string assertions miss.
 
-import subprocess as _subprocess
-import tempfile as _tempfile
+import subprocess as _subprocess  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
 
 
 def _run_hook_with(prompt: str, rules: dict | None = None) -> tuple[int, str, str]:
@@ -669,8 +689,9 @@ def test_hook_runtime_architecture_keyword_fires():
     rc, out, err = _run_hook_with("factor out the duplicated controller logic")
     assert rc == 0
     response = _json.loads(out)
-    assert "ce-ask-architecture-strategist" in (
-        response["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "ce-ask-architecture-strategist"
+        in (response["hookSpecificOutput"]["additionalContext"])
     )
 
 
@@ -746,8 +767,9 @@ def test_hook_runtime_caps_at_three_suggestions():
 def test_hook_runtime_case_insensitive_match():
     rc, out, _ = _run_hook_with("AUDIT FOR OWASP ISSUES")
     response = _json.loads(out)
-    assert "ce-ask-security-sentinel" in (
-        response["hookSpecificOutput"]["additionalContext"]
+    assert (
+        "ce-ask-security-sentinel"
+        in (response["hookSpecificOutput"]["additionalContext"])
     )
 
 
@@ -778,17 +800,19 @@ def test_hook_runtime_works_when_rules_missing():
 
 def test_default_config_has_haiku_disabled():
     """Haiku is opt-in. Default config must not auto-enable it."""
-    from generate_wrappers import DEFAULT_HOOK_RULES
-    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    from generate_wrappers import HAIKU_CONFIG
+
+    cfg = HAIKU_CONFIG["haiku_classifier"]
     assert cfg["enabled"] is False
 
 
 def test_default_config_haiku_caps_budget_and_timeout():
     """Sane defaults for cost/latency. Bounds the worst case."""
-    from generate_wrappers import DEFAULT_HOOK_RULES
-    cfg = DEFAULT_HOOK_RULES["config"]["haiku_classifier"]
+    from generate_wrappers import HAIKU_CONFIG
+
+    cfg = HAIKU_CONFIG["haiku_classifier"]
     assert 0 < cfg["max_budget_usd"] <= 0.05  # don't accidentally spend $5/prompt
-    assert 0 < cfg["timeout_seconds"] <= 30   # bound latency
+    assert 0 < cfg["timeout_seconds"] <= 30  # bound latency
 
 
 def test_hook_script_imports_subprocess_for_haiku():
@@ -834,7 +858,7 @@ def test_hook_script_haiku_uses_structured_output():
     `result` (per claude_p_headless_subscription.md trap section)."""
     src = render_hook_script()
     assert '"structured_output"' in src
-    assert 'structured_output' in src
+    assert "structured_output" in src
 
 
 def test_hook_runtime_haiku_disabled_falls_through():
@@ -860,6 +884,7 @@ def test_hook_runtime_keyword_match_short_circuits_haiku():
     (not a Haiku-shaped fallback).
     """
     import time as _time
+
     rules = {
         "config": {"haiku_classifier": {"enabled": True, "timeout_seconds": 10}},
         "rules": [
@@ -876,7 +901,9 @@ def test_hook_runtime_keyword_match_short_circuits_haiku():
     assert rc == 0
     response = _json.loads(out)
     assert "KEYWORD_PATH_MARKER" in response["hookSpecificOutput"]["additionalContext"]
-    assert elapsed < 2.0, f"keyword-match took {elapsed:.1f}s — Haiku may have been called"
+    assert elapsed < 2.0, (
+        f"keyword-match took {elapsed:.1f}s — Haiku may have been called"
+    )
 
 
 # -------- bin/ce-lite-persona resolver shim (Phase B.9) --------
@@ -927,14 +954,18 @@ def test_resolver_advertises_subcommands_in_docstring():
         assert flag in src, f"resolver source missing flag advertisement: {flag}"
 
 
-def _run_resolver(tmp: Path, args: list[str], extra_env: dict | None = None) -> tuple[int, str, str]:
+def _run_resolver(
+    tmp: Path, args: list[str], extra_env: dict | None = None
+) -> tuple[int, str, str]:
     """Write resolver to a tmpdir with a fake manifest + prompt and invoke it."""
     import subprocess as _subp
 
     plugin_root = tmp / "plugin"
     first_call = not plugin_root.exists()
     (plugin_root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
-    (plugin_root / ".claude-plugin" / "plugin.json").write_text('{"name":"x","version":"1"}')
+    (plugin_root / ".claude-plugin" / "plugin.json").write_text(
+        '{"name":"x","version":"1"}'
+    )
     prompts_dir = plugin_root / "references" / "agent-prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
     if first_call:
@@ -968,7 +999,10 @@ def _run_resolver(tmp: Path, args: list[str], extra_env: dict | None = None) -> 
         env.update(extra_env)
     proc = _subp.run(
         ["python3", str(resolver), *args],
-        capture_output=True, text=True, env=env, timeout=10,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -1027,7 +1061,9 @@ def test_resolver_runtime_diagnose_flags_missing_prompts(tmp_path: Path):
     rc1, _, _ = _run_resolver(tmp_path, ["--diagnose"])
     assert rc1 == 0
     # Remove the prompt file and re-run
-    (tmp_path / "plugin" / "references" / "agent-prompts" / "ce-security-sentinel.md").unlink()
+    (
+        tmp_path / "plugin" / "references" / "agent-prompts" / "ce-security-sentinel.md"
+    ).unlink()
     rc2, _, err = _run_resolver(tmp_path, ["--diagnose"])
     assert rc2 != 0
     assert "ce-security-sentinel" in err
@@ -1052,6 +1088,7 @@ def test_render_wrapper_invokes_resolver_prefix():
     prefix (body + trace tag + tool restriction) in one resolver call. Saves
     ~15 lines of inline preamble per wrapper body."""
     from generate_wrappers import Persona, render_wrapper
+
     p = Persona(
         name="ce-security-sentinel",
         description="Security reviews.",
@@ -1070,6 +1107,7 @@ def test_render_panel_invokes_resolver_prefix():
     """Panel skill uses --prefix with --via ce-ask-panel so trace tags
     distinguish panel dispatch from direct."""
     from generate_wrappers import render_panel
+
     out = render_panel([])
     assert "ce-lite-persona" in out
     assert "--prefix" in out
@@ -1081,6 +1119,7 @@ def test_render_meta_skill_invokes_resolver():
     """Meta-skill (`/ce-ask`) uses --list (mode 1) and --prefix --via
     ce-ask-meta (mode 3 dispatch)."""
     from generate_wrappers import render_meta_skill
+
     out = render_meta_skill()
     assert "ce-lite-persona --list" in out
     assert "--prefix" in out
@@ -1092,6 +1131,7 @@ def test_rewrite_preamble_references_resolver_prefix():
     """Orchestrator preamble teaches dispatch via --prefix with an
     orchestrator-specific --via tag, NOT the legacy inline preamble."""
     from rewrite import PREAMBLE
+
     assert "ce-lite-persona" in PREAMBLE
     assert "--prefix" in PREAMBLE
     assert "general-purpose" in PREAMBLE  # still the default dispatch type
@@ -1104,6 +1144,7 @@ def test_rewrite_preamble_keeps_meaningful_description_guidance():
     """The 'general-purpose' trace label is mitigated by a meaningful
     Agent.description; preamble must teach that pattern."""
     from rewrite import PREAMBLE
+
     assert "description" in PREAMBLE.lower()
     assert "trace" in PREAMBLE.lower() or "readable" in PREAMBLE.lower()
 
@@ -1148,7 +1189,6 @@ def test_resolver_runtime_prefix_safe_for_arbitrary_task_content(tmp_path: Path)
     """The task NEVER passes through argv on a --prefix call; only the
     persona name and dispatch source do. This test documents the
     quote-safety property by verifying that --prefix takes no task arg."""
-    import subprocess as _subp
     # Even if we tried to pass a task as an extra positional, argparse rejects
     rc, _, err = _run_resolver(
         tmp_path,
@@ -1165,20 +1205,24 @@ def test_resolver_runtime_prefix_handles_null_tools(tmp_path: Path):
     plugin_root = tmp_path / "plugin"
     plugin_root.mkdir(parents=True, exist_ok=True)
     (plugin_root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
-    (plugin_root / ".claude-plugin" / "plugin.json").write_text('{"name":"x","version":"1"}')
+    (plugin_root / ".claude-plugin" / "plugin.json").write_text(
+        '{"name":"x","version":"1"}'
+    )
     prompts_dir = plugin_root / "references" / "agent-prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
     (prompts_dir / "ce-no-tools-persona.md").write_text("body text\n")
     manifest = {
         "schema_version": 1,
         "agent_count": 1,
-        "agents": [{
-            "name": "ce-no-tools-persona",
-            "description": "x",
-            "model": "inherit",
-            "tools": None,
-            "prompt_path": "references/agent-prompts/ce-no-tools-persona.md",
-        }],
+        "agents": [
+            {
+                "name": "ce-no-tools-persona",
+                "description": "x",
+                "model": "inherit",
+                "tools": None,
+                "prompt_path": "references/agent-prompts/ce-no-tools-persona.md",
+            }
+        ],
     }
     (prompts_dir / "manifest.json").write_text(_json.dumps(manifest))
     bin_dir = plugin_root / "bin"
@@ -1187,9 +1231,13 @@ def test_resolver_runtime_prefix_handles_null_tools(tmp_path: Path):
     resolver.write_text(render_persona_resolver(), encoding="utf-8")
     resolver.chmod(0o755)
     import subprocess as _subp
+
     proc = _subp.run(
         ["python3", str(resolver), "ce-no-tools-persona", "--prefix"],
-        capture_output=True, text=True, env=os.environ.copy(), timeout=10,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+        timeout=10,
     )
     assert proc.returncode == 0, f"stderr={proc.stderr!r}"
     assert "tools=[any]" in proc.stdout
@@ -1212,7 +1260,9 @@ def _init_repo(repo: Path) -> None:
     _suff_subp.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     _suff_subp.run(["git", "-C", str(repo), "config", "user.email", "t@t"], check=True)
     _suff_subp.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
-    _suff_subp.run(["git", "-C", str(repo), "config", "commit.gpgsign", "false"], check=True)
+    _suff_subp.run(
+        ["git", "-C", str(repo), "config", "commit.gpgsign", "false"], check=True
+    )
 
 
 def _commit(repo: Path, path: str, content: str, msg: str) -> None:
@@ -1280,3 +1330,154 @@ def test_lite_suffix_empty_upstream_tag(tmp_path: Path):
     _init_repo(tmp_path)
     _commit(tmp_path, ".last-processed", "compound-engineering-v3.8.3\n", "v3.8.3")
     assert lite_suffix_from_git(tmp_path, "") == "-lite"
+
+
+# -------- cross-corpus validators (validate.py) --------
+
+from validate import (  # noqa: E402
+    ValidationError,
+    check_dispatch_sources_cross_corpus,
+    check_hook_rules_cross_corpus,
+)
+
+
+def _make_dist_with_hooks_and_manifest(
+    tmp_path: Path,
+    manifest_personas: list[str],
+    rule_personas: list[str],
+) -> Path:
+    dist = tmp_path / "dist"
+    (dist / "references" / "agent-prompts").mkdir(parents=True)
+    (dist / "hooks").mkdir()
+    (dist / "skills").mkdir()
+    (dist / "references" / "agent-prompts" / "manifest.json").write_text(
+        _json.dumps(
+            {
+                "schema_version": 1,
+                "upstream_tag": "test",
+                "agent_count": len(manifest_personas),
+                "agents": [
+                    {
+                        "name": n,
+                        "description": f"desc for {n}",
+                        "model": "inherit",
+                        "tools": None,
+                        "prompt_path": f"references/agent-prompts/{n}.md",
+                        "upstream_source": f"agents/{n}.agent.md",
+                    }
+                    for n in manifest_personas
+                ],
+            }
+        )
+    )
+    (dist / "hooks" / "skill-rules.json").write_text(
+        _json.dumps(
+            {
+                "config": {"haiku_classifier": {"enabled": False}},
+                "rules": [
+                    {"persona": p, "keywords": ["x"], "phrasing": "x"}
+                    for p in rule_personas
+                ],
+            }
+        )
+    )
+    return dist
+
+
+def test_check_hook_rules_cross_corpus_passes_when_all_personas_in_manifest(
+    tmp_path: Path,
+):
+    dist = _make_dist_with_hooks_and_manifest(
+        tmp_path,
+        manifest_personas=["ce-a-reviewer", "ce-b-reviewer", "ce-c-reviewer"],
+        rule_personas=["ce-a-reviewer", "ce-b-reviewer"],
+    )
+    check_hook_rules_cross_corpus(dist)  # no raise
+
+
+def test_check_hook_rules_cross_corpus_fails_on_unknown_persona(tmp_path: Path):
+    dist = _make_dist_with_hooks_and_manifest(
+        tmp_path,
+        manifest_personas=["ce-a-reviewer"],
+        rule_personas=["ce-a-reviewer", "ce-typo-reviewer"],
+    )
+    with pytest.raises(ValidationError, match="ce-typo-reviewer"):
+        check_hook_rules_cross_corpus(dist)
+
+
+def test_check_hook_rules_cross_corpus_skips_when_no_hooks_dir(tmp_path: Path):
+    """Pre-B.7 dist (no hooks/) shouldn't fail this check."""
+    dist = tmp_path / "dist"
+    (dist / "references" / "agent-prompts").mkdir(parents=True)
+    (dist / "references" / "agent-prompts" / "manifest.json").write_text(
+        _json.dumps({"agents": []})
+    )
+    check_hook_rules_cross_corpus(dist)  # no raise — file absent → skip
+
+
+def _make_dist_with_resolver(
+    tmp_path: Path,
+    dispatch_sources: list[str],
+    via_used_in_skills: list[tuple[str, str]],  # (skill_name, via_value)
+) -> Path:
+    """Build a tempdir with converter/resources/ce-lite-persona + dist/skills/.
+
+    The resolver source contains a synthetic DISPATCH_SOURCES set; skills
+    contain `--via X` references that may or may not be in that set.
+    """
+    repo_root = tmp_path
+    (repo_root / "converter" / "resources").mkdir(parents=True)
+    resolver = repo_root / "converter" / "resources" / "ce-lite-persona"
+    sources_literal = ",\n    ".join(f'"{s}"' for s in dispatch_sources)
+    resolver.write_text(
+        f"#!/usr/bin/env python3\nDISPATCH_SOURCES = {{\n    {sources_literal}\n}}\n"
+    )
+
+    dist = repo_root / "dist"
+    (dist / "skills").mkdir(parents=True)
+    for skill_name, via in via_used_in_skills:
+        skill_dir = dist / "skills" / skill_name
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(
+            f"---\nname: {skill_name}\n---\nUse `ce-lite-persona X --prefix --via {via}`.\n"
+        )
+    return dist
+
+
+def test_check_dispatch_sources_cross_corpus_passes_when_all_via_in_set(
+    tmp_path: Path,
+):
+    dist = _make_dist_with_resolver(
+        tmp_path,
+        dispatch_sources=["ce-ask-direct", "ce-code-review", "ce-ask-panel"],
+        via_used_in_skills=[
+            ("ce-code-review", "ce-code-review"),
+            ("ce-ask", "ce-ask-direct"),
+        ],
+    )
+    check_dispatch_sources_cross_corpus(dist)
+
+
+def test_check_dispatch_sources_cross_corpus_fails_on_unknown_via(tmp_path: Path):
+    dist = _make_dist_with_resolver(
+        tmp_path,
+        dispatch_sources=["ce-ask-direct", "ce-code-review"],
+        via_used_in_skills=[
+            ("ce-bad", "ce-mystery-source"),
+        ],
+    )
+    with pytest.raises(ValidationError, match="ce-mystery-source"):
+        check_dispatch_sources_cross_corpus(dist)
+
+
+def test_check_dispatch_sources_cross_corpus_skips_when_no_resolver_source(
+    tmp_path: Path,
+):
+    """validate.py run against an isolated dist (e.g., tempdir without sibling
+    converter/) should skip this check rather than fail."""
+    dist = tmp_path / "dist"
+    (dist / "skills" / "ce-x").mkdir(parents=True)
+    (dist / "skills" / "ce-x" / "SKILL.md").write_text(
+        "---\nname: ce-x\n---\nUses --via ce-anywhere\n"
+    )
+    check_dispatch_sources_cross_corpus(dist)  # no raise

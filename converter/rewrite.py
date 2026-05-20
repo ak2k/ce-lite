@@ -100,7 +100,9 @@ def insert_preamble(skill_text: str) -> str:
     return skill_text[:fm_end] + "\n" + PREAMBLE + "\n" + skill_text[fm_end:]
 
 
-def rewrite_skill(skill_path: Path, manifest_names: set[str]) -> tuple[bool, list[StrayMention]]:
+def rewrite_skill(
+    skill_path: Path, manifest_names: set[str]
+) -> tuple[bool, list[StrayMention]]:
     """Rewrite one SKILL.md if it references any manifest agent.
 
     Returns (was_modified, stray_mentions). stray_mentions are agent-shaped

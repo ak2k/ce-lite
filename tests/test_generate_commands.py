@@ -71,7 +71,7 @@ def test_shorten_description_collapses_whitespace():
 
 def test_render_command_minimal_no_argument_hint():
     body = render_command("ce-plan", "Plan tasks with structure.", None)
-    assert "description: \"Plan tasks with structure.\"" in body
+    assert 'description: "Plan tasks with structure."' in body
     assert "argument-hint" not in body
     assert "Use the `ce-plan` skill" in body
     assert "$ARGUMENTS" in body
@@ -84,8 +84,8 @@ def test_render_command_with_argument_hint():
         "Execute work.",
         "[Plan doc path or description of work]",
     )
-    assert "description: \"Execute work.\"" in body
-    assert "argument-hint: \"[Plan doc path or description of work]\"" in body
+    assert 'description: "Execute work."' in body
+    assert 'argument-hint: "[Plan doc path or description of work]"' in body
     assert "Use the `ce-work` skill" in body
 
 
@@ -102,13 +102,15 @@ def test_render_command_frontmatter_well_formed():
 def test_render_command_handles_quotes_in_description():
     # JSON encoding handles embedded quotes safely
     body = render_command("ce-x", 'Run "the thing" carefully.', None)
-    assert "description: \"Run \\\"the thing\\\" carefully.\"" in body
+    assert 'description: "Run \\"the thing\\" carefully."' in body
 
 
 # -------- collect_skills --------
 
 
-def _write_skill(skills_dir: Path, name: str, description: str, argument_hint: str | None = None) -> None:
+def _write_skill(
+    skills_dir: Path, name: str, description: str, argument_hint: str | None = None
+) -> None:
     """Helper: create a minimal SKILL.md under skills_dir/<name>/."""
     skill_dir = skills_dir / name
     skill_dir.mkdir(parents=True)
@@ -217,5 +219,5 @@ def test_write_commands_body_contains_skill_name(tmp_path: Path):
 
     body = (tmp_path / "commands" / "ce-debug.md").read_text()
     assert "ce-debug" in body
-    assert "argument-hint: \"[test name]\"" in body
+    assert 'argument-hint: "[test name]"' in body
     assert "$ARGUMENTS" in body
