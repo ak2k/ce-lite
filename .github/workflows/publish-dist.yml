@@ -58,9 +58,21 @@ jobs:
           mv dist-staged dist
           echo "${{ inputs.upstream_tag }}" > .last-processed
 
+      - name: Mint ak2k-ci App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
       - name: Open PR
         uses: peter-evans/create-pull-request@v8
         with:
+          # Open the PR as the ak2k-ci App, NOT the default GITHUB_TOKEN.
+          # GITHUB_TOKEN-opened PRs emit no events, so ci.yml never ran on
+          # the auto-PR and auto-merge-publish-dist never fired. An App-token
+          # PR fires pull_request -> ci runs -> auto-merge merges when green.
+          token: ${{ steps.app-token.outputs.token }}
           branch: ce-lite/upstream-${{ inputs.upstream_tag }}
           title: "chore: convert CE ${{ inputs.upstream_tag }}"
           commit-message: "chore: convert CE ${{ inputs.upstream_tag }}"
