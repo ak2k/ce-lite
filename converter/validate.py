@@ -539,10 +539,13 @@ def check_round_trip(dist: Path, upstream: Path, manifest_names: set[str]) -> No
     upstream_agents = plugin_root / "agents"
     dist_prompts = dist / "references" / "agent-prompts"
     for name in sorted(manifest_names):
-        upstream_file = upstream_agents / f"{name}.agent.md"
+        # v3.8.4 renamed agents <name>.agent.md → <name>.md; accept either.
+        upstream_file = upstream_agents / f"{name}.md"
+        if not upstream_file.is_file():
+            upstream_file = upstream_agents / f"{name}.agent.md"
         dist_file = dist_prompts / f"{name}.md"
         if not upstream_file.is_file():
-            fail(f"round-trip: upstream missing {upstream_file}")
+            fail(f"round-trip: upstream missing agents/{name}.md (or .agent.md)")
 
         upstream_text = upstream_file.read_text(encoding="utf-8")
         try:

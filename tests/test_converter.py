@@ -23,12 +23,54 @@ CONVERTER_DIR = Path(__file__).resolve().parent.parent / "converter"
 sys.path.insert(0, str(CONVERTER_DIR))
 
 from DISPATCH_PATTERNS import AGENT_REFERENCE_RE  # noqa: E402
-from extract import find_plugin_root, parse_frontmatter  # noqa: E402
+from extract import (  # noqa: E402
+    extract_agents,
+    find_plugin_root,
+    parse_frontmatter,
+)
 from rewrite import (  # noqa: E402
     PREAMBLE_MARKER_BEGIN,
     PREAMBLE_MARKER_END,
     insert_preamble,
 )
+
+
+# -------- extract_agents: discovery across the v3.8.4 agent-file rename --------
+
+
+def _write_agent(agents_dir: Path, filename: str, name: str, body: str) -> None:
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    (agents_dir / filename).write_text(
+        f"---\nname: {name}\ndescription: d\nmodel: inherit\ntools: Read, Grep\n---\n{body}\n",
+        encoding="utf-8",
+    )
+
+
+def test_extract_agents_v384_plain_md(tmp_path):
+    """v3.8.4 renamed agents <name>.agent.md → <name>.md; extract must find them."""
+    root = tmp_path / "plugin"
+    _write_agent(root / "agents", "ce-foo.md", "ce-foo", "FOO BODY")
+    records = extract_agents(root)
+    assert [r.name for r in records] == ["ce-foo"]
+    assert records[0].body.strip() == "FOO BODY"
+    assert records[0].source_path == "agents/ce-foo.md"
+
+
+def test_extract_agents_legacy_agent_md_still_works(tmp_path):
+    """The ≤v3.8.3 <name>.agent.md layout must remain supported."""
+    root = tmp_path / "plugin"
+    _write_agent(root / "agents", "ce-bar.agent.md", "ce-bar", "BAR BODY")
+    records = extract_agents(root)
+    assert [r.name for r in records] == ["ce-bar"]
+    assert records[0].source_path == "agents/ce-bar.agent.md"
+
+
+def test_extract_agents_rejects_filename_name_mismatch(tmp_path):
+    """Filename must match the frontmatter name under an accepted suffix."""
+    root = tmp_path / "plugin"
+    _write_agent(root / "agents", "ce-foo.md", "ce-different", "BODY")
+    with pytest.raises(ValueError, match="does not match frontmatter name"):
+        extract_agents(root)
 
 
 # -------- parse_frontmatter --------
