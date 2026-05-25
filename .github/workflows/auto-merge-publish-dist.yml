@@ -7,10 +7,12 @@ name: auto-merge-publish-dist
 # from the API, bypassing GitHub's `--auto` facility entirely. This
 # sidesteps two gotchas in one stroke:
 #
-#  - `peter-evans/create-pull-request@v8` with the default `GITHUB_TOKEN`
-#    doesn't fire `pull_request.opened` events (anti-recursion safeguard).
-#    `pull_request_target` and `workflow_run` BOTH fire regardless. Either
-#    is sufficient to drive the merge.
+#  - publish-dist opens its PR with the `ak2k-ci` GitHub App token (NOT the
+#    default `GITHUB_TOKEN`). This matters: GitHub suppresses ALL events for a
+#    PR opened by `GITHUB_TOKEN` -- including `pull_request_target` -- which
+#    silently stalled this auto-merge on every bump. An App-token PR fires
+#    `pull_request`/`pull_request_target` normally, so ci.yml runs on it and
+#    the `workflow_run: ci` path below merges once green. (See publish-dist.yml.)
 #
 #  - `workflow_dispatch`-triggered runs of `ci.yml` create check_runs that
 #    GitHub's branch-protection layer doesn't credit. By direct-merging via
@@ -31,9 +33,10 @@ on:
     workflows: ["ci"]
     types: [completed]
 
-  # Fires when the PR is opened by publish-dist. peter-evans's anti-
-  # recursion doesn't apply to pull_request_target. This is what kicks
-  # off Phase 1 (dispatch ci.yml against the branch).
+  # Fires when publish-dist opens the PR (now with the ak2k-ci App token, so
+  # the event is emitted). Phase 1 (dispatch ci.yml) is a redundant fallback
+  # now -- ci.yml already runs on the App-token PR via `pull_request` -- but
+  # harmless: it re-dispatches ci and Phase 2 merges on the first green check.
   pull_request_target:
     types: [opened, reopened]
     branches: [main]
