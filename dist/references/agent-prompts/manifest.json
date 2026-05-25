@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "upstream_tag": "compound-engineering-v3.8.3",
+  "upstream_tag": "compound-engineering-v3.8.4",
   "agent_count": 49,
   "agents": [
     {
@@ -14,7 +14,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-adversarial-document-reviewer.md",
-      "upstream_source": "agents/ce-adversarial-document-reviewer.agent.md"
+      "upstream_source": "agents/ce-adversarial-document-reviewer.md"
     },
     {
       "name": "ce-adversarial-reviewer",
@@ -28,7 +28,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-adversarial-reviewer.md",
-      "upstream_source": "agents/ce-adversarial-reviewer.agent.md"
+      "upstream_source": "agents/ce-adversarial-reviewer.md"
     },
     {
       "name": "ce-agent-native-reviewer",
@@ -41,7 +41,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-agent-native-reviewer.md",
-      "upstream_source": "agents/ce-agent-native-reviewer.agent.md"
+      "upstream_source": "agents/ce-agent-native-reviewer.md"
     },
     {
       "name": "ce-ankane-readme-writer",
@@ -49,7 +49,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-ankane-readme-writer.md",
-      "upstream_source": "agents/ce-ankane-readme-writer.agent.md"
+      "upstream_source": "agents/ce-ankane-readme-writer.md"
     },
     {
       "name": "ce-api-contract-reviewer",
@@ -63,7 +63,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-api-contract-reviewer.md",
-      "upstream_source": "agents/ce-api-contract-reviewer.agent.md"
+      "upstream_source": "agents/ce-api-contract-reviewer.md"
     },
     {
       "name": "ce-architecture-strategist",
@@ -76,7 +76,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-architecture-strategist.md",
-      "upstream_source": "agents/ce-architecture-strategist.agent.md"
+      "upstream_source": "agents/ce-architecture-strategist.md"
     },
     {
       "name": "ce-best-practices-researcher",
@@ -92,7 +92,7 @@
         "mcp__context7__*"
       ],
       "prompt_path": "references/agent-prompts/ce-best-practices-researcher.md",
-      "upstream_source": "agents/ce-best-practices-researcher.agent.md"
+      "upstream_source": "agents/ce-best-practices-researcher.md"
     },
     {
       "name": "ce-code-simplicity-reviewer",
@@ -105,7 +105,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-code-simplicity-reviewer.md",
-      "upstream_source": "agents/ce-code-simplicity-reviewer.agent.md"
+      "upstream_source": "agents/ce-code-simplicity-reviewer.md"
     },
     {
       "name": "ce-coherence-reviewer",
@@ -117,7 +117,7 @@
         "Glob"
       ],
       "prompt_path": "references/agent-prompts/ce-coherence-reviewer.md",
-      "upstream_source": "agents/ce-coherence-reviewer.agent.md"
+      "upstream_source": "agents/ce-coherence-reviewer.md"
     },
     {
       "name": "ce-correctness-reviewer",
@@ -131,7 +131,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-correctness-reviewer.md",
-      "upstream_source": "agents/ce-correctness-reviewer.agent.md"
+      "upstream_source": "agents/ce-correctness-reviewer.md"
     },
     {
       "name": "ce-data-integrity-guardian",
@@ -144,7 +144,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-data-integrity-guardian.md",
-      "upstream_source": "agents/ce-data-integrity-guardian.agent.md"
+      "upstream_source": "agents/ce-data-integrity-guardian.md"
     },
     {
       "name": "ce-data-migration-expert",
@@ -157,7 +157,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-data-migration-expert.md",
-      "upstream_source": "agents/ce-data-migration-expert.agent.md"
+      "upstream_source": "agents/ce-data-migration-expert.md"
     },
     {
       "name": "ce-data-migrations-reviewer",
@@ -171,7 +171,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-data-migrations-reviewer.md",
-      "upstream_source": "agents/ce-data-migrations-reviewer.agent.md"
+      "upstream_source": "agents/ce-data-migrations-reviewer.md"
     },
     {
       "name": "ce-deployment-verification-agent",
@@ -184,7 +184,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-deployment-verification-agent.md",
-      "upstream_source": "agents/ce-deployment-verification-agent.agent.md"
+      "upstream_source": "agents/ce-deployment-verification-agent.md"
     },
     {
       "name": "ce-design-implementation-reviewer",
@@ -192,7 +192,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-design-implementation-reviewer.md",
-      "upstream_source": "agents/ce-design-implementation-reviewer.agent.md"
+      "upstream_source": "agents/ce-design-implementation-reviewer.md"
     },
     {
       "name": "ce-design-iterator",
@@ -200,7 +200,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-design-iterator.md",
-      "upstream_source": "agents/ce-design-iterator.agent.md"
+      "upstream_source": "agents/ce-design-iterator.md"
     },
     {
       "name": "ce-design-lens-reviewer",
@@ -213,7 +213,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-design-lens-reviewer.md",
-      "upstream_source": "agents/ce-design-lens-reviewer.agent.md"
+      "upstream_source": "agents/ce-design-lens-reviewer.md"
     },
     {
       "name": "ce-dhh-rails-reviewer",
@@ -227,7 +227,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-dhh-rails-reviewer.md",
-      "upstream_source": "agents/ce-dhh-rails-reviewer.agent.md"
+      "upstream_source": "agents/ce-dhh-rails-reviewer.md"
     },
     {
       "name": "ce-feasibility-reviewer",
@@ -240,7 +240,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-feasibility-reviewer.md",
-      "upstream_source": "agents/ce-feasibility-reviewer.agent.md"
+      "upstream_source": "agents/ce-feasibility-reviewer.md"
     },
     {
       "name": "ce-figma-design-sync",
@@ -248,7 +248,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-figma-design-sync.md",
-      "upstream_source": "agents/ce-figma-design-sync.agent.md"
+      "upstream_source": "agents/ce-figma-design-sync.md"
     },
     {
       "name": "ce-framework-docs-researcher",
@@ -264,7 +264,7 @@
         "mcp__context7__*"
       ],
       "prompt_path": "references/agent-prompts/ce-framework-docs-researcher.md",
-      "upstream_source": "agents/ce-framework-docs-researcher.agent.md"
+      "upstream_source": "agents/ce-framework-docs-researcher.md"
     },
     {
       "name": "ce-git-history-analyzer",
@@ -277,7 +277,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-git-history-analyzer.md",
-      "upstream_source": "agents/ce-git-history-analyzer.agent.md"
+      "upstream_source": "agents/ce-git-history-analyzer.md"
     },
     {
       "name": "ce-issue-intelligence-analyst",
@@ -291,7 +291,7 @@
         "mcp__github__*"
       ],
       "prompt_path": "references/agent-prompts/ce-issue-intelligence-analyst.md",
-      "upstream_source": "agents/ce-issue-intelligence-analyst.agent.md"
+      "upstream_source": "agents/ce-issue-intelligence-analyst.md"
     },
     {
       "name": "ce-julik-frontend-races-reviewer",
@@ -305,7 +305,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-julik-frontend-races-reviewer.md",
-      "upstream_source": "agents/ce-julik-frontend-races-reviewer.agent.md"
+      "upstream_source": "agents/ce-julik-frontend-races-reviewer.md"
     },
     {
       "name": "ce-kieran-python-reviewer",
@@ -319,7 +319,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-kieran-python-reviewer.md",
-      "upstream_source": "agents/ce-kieran-python-reviewer.agent.md"
+      "upstream_source": "agents/ce-kieran-python-reviewer.md"
     },
     {
       "name": "ce-kieran-rails-reviewer",
@@ -333,7 +333,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-kieran-rails-reviewer.md",
-      "upstream_source": "agents/ce-kieran-rails-reviewer.agent.md"
+      "upstream_source": "agents/ce-kieran-rails-reviewer.md"
     },
     {
       "name": "ce-kieran-typescript-reviewer",
@@ -347,7 +347,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-kieran-typescript-reviewer.md",
-      "upstream_source": "agents/ce-kieran-typescript-reviewer.agent.md"
+      "upstream_source": "agents/ce-kieran-typescript-reviewer.md"
     },
     {
       "name": "ce-learnings-researcher",
@@ -360,7 +360,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-learnings-researcher.md",
-      "upstream_source": "agents/ce-learnings-researcher.agent.md"
+      "upstream_source": "agents/ce-learnings-researcher.md"
     },
     {
       "name": "ce-maintainability-reviewer",
@@ -374,7 +374,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-maintainability-reviewer.md",
-      "upstream_source": "agents/ce-maintainability-reviewer.agent.md"
+      "upstream_source": "agents/ce-maintainability-reviewer.md"
     },
     {
       "name": "ce-pattern-recognition-specialist",
@@ -387,7 +387,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-pattern-recognition-specialist.md",
-      "upstream_source": "agents/ce-pattern-recognition-specialist.agent.md"
+      "upstream_source": "agents/ce-pattern-recognition-specialist.md"
     },
     {
       "name": "ce-performance-oracle",
@@ -400,7 +400,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-performance-oracle.md",
-      "upstream_source": "agents/ce-performance-oracle.agent.md"
+      "upstream_source": "agents/ce-performance-oracle.md"
     },
     {
       "name": "ce-performance-reviewer",
@@ -414,7 +414,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-performance-reviewer.md",
-      "upstream_source": "agents/ce-performance-reviewer.agent.md"
+      "upstream_source": "agents/ce-performance-reviewer.md"
     },
     {
       "name": "ce-pr-comment-resolver",
@@ -422,7 +422,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-pr-comment-resolver.md",
-      "upstream_source": "agents/ce-pr-comment-resolver.agent.md"
+      "upstream_source": "agents/ce-pr-comment-resolver.md"
     },
     {
       "name": "ce-previous-comments-reviewer",
@@ -436,7 +436,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-previous-comments-reviewer.md",
-      "upstream_source": "agents/ce-previous-comments-reviewer.agent.md"
+      "upstream_source": "agents/ce-previous-comments-reviewer.md"
     },
     {
       "name": "ce-product-lens-reviewer",
@@ -449,7 +449,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-product-lens-reviewer.md",
-      "upstream_source": "agents/ce-product-lens-reviewer.agent.md"
+      "upstream_source": "agents/ce-product-lens-reviewer.md"
     },
     {
       "name": "ce-project-standards-reviewer",
@@ -463,7 +463,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-project-standards-reviewer.md",
-      "upstream_source": "agents/ce-project-standards-reviewer.agent.md"
+      "upstream_source": "agents/ce-project-standards-reviewer.md"
     },
     {
       "name": "ce-reliability-reviewer",
@@ -477,7 +477,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-reliability-reviewer.md",
-      "upstream_source": "agents/ce-reliability-reviewer.agent.md"
+      "upstream_source": "agents/ce-reliability-reviewer.md"
     },
     {
       "name": "ce-repo-research-analyst",
@@ -490,7 +490,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-repo-research-analyst.md",
-      "upstream_source": "agents/ce-repo-research-analyst.agent.md"
+      "upstream_source": "agents/ce-repo-research-analyst.md"
     },
     {
       "name": "ce-schema-drift-detector",
@@ -503,7 +503,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-schema-drift-detector.md",
-      "upstream_source": "agents/ce-schema-drift-detector.agent.md"
+      "upstream_source": "agents/ce-schema-drift-detector.md"
     },
     {
       "name": "ce-scope-guardian-reviewer",
@@ -516,7 +516,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-scope-guardian-reviewer.md",
-      "upstream_source": "agents/ce-scope-guardian-reviewer.agent.md"
+      "upstream_source": "agents/ce-scope-guardian-reviewer.md"
     },
     {
       "name": "ce-security-lens-reviewer",
@@ -529,7 +529,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-security-lens-reviewer.md",
-      "upstream_source": "agents/ce-security-lens-reviewer.agent.md"
+      "upstream_source": "agents/ce-security-lens-reviewer.md"
     },
     {
       "name": "ce-security-reviewer",
@@ -543,7 +543,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-security-reviewer.md",
-      "upstream_source": "agents/ce-security-reviewer.agent.md"
+      "upstream_source": "agents/ce-security-reviewer.md"
     },
     {
       "name": "ce-security-sentinel",
@@ -556,7 +556,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-security-sentinel.md",
-      "upstream_source": "agents/ce-security-sentinel.agent.md"
+      "upstream_source": "agents/ce-security-sentinel.md"
     },
     {
       "name": "ce-session-historian",
@@ -564,7 +564,7 @@
       "model": "inherit",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-session-historian.md",
-      "upstream_source": "agents/ce-session-historian.agent.md"
+      "upstream_source": "agents/ce-session-historian.md"
     },
     {
       "name": "ce-slack-researcher",
@@ -572,7 +572,7 @@
       "model": "sonnet",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-slack-researcher.md",
-      "upstream_source": "agents/ce-slack-researcher.agent.md"
+      "upstream_source": "agents/ce-slack-researcher.md"
     },
     {
       "name": "ce-spec-flow-analyzer",
@@ -585,7 +585,7 @@
         "Bash"
       ],
       "prompt_path": "references/agent-prompts/ce-spec-flow-analyzer.md",
-      "upstream_source": "agents/ce-spec-flow-analyzer.agent.md"
+      "upstream_source": "agents/ce-spec-flow-analyzer.md"
     },
     {
       "name": "ce-swift-ios-reviewer",
@@ -599,7 +599,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-swift-ios-reviewer.md",
-      "upstream_source": "agents/ce-swift-ios-reviewer.agent.md"
+      "upstream_source": "agents/ce-swift-ios-reviewer.md"
     },
     {
       "name": "ce-testing-reviewer",
@@ -613,7 +613,7 @@
         "Write"
       ],
       "prompt_path": "references/agent-prompts/ce-testing-reviewer.md",
-      "upstream_source": "agents/ce-testing-reviewer.agent.md"
+      "upstream_source": "agents/ce-testing-reviewer.md"
     },
     {
       "name": "ce-web-researcher",
@@ -621,7 +621,7 @@
       "model": "sonnet",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-web-researcher.md",
-      "upstream_source": "agents/ce-web-researcher.agent.md"
+      "upstream_source": "agents/ce-web-researcher.md"
     }
   ]
 }
