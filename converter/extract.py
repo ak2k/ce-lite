@@ -3,7 +3,7 @@
 For CE v3.x layout:
   upstream/plugins/compound-engineering/
     ├── .claude-plugin/plugin.json
-    ├── agents/<name>.agent.md       ← these get extracted out
+    ├── agents/<name>.md             ← extracted out (≤v3.8.3: <name>.agent.md)
     ├── skills/<name>/SKILL.md       ← copied as-is (rewrite.py prepends a preamble)
     └── ... (other top-level files)
 
@@ -29,8 +29,11 @@ from pathlib import Path
 # Frontmatter is fenced with "---" lines at the top of each agent .md file.
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
 
-# Agent files in v3.x are named "<name>.agent.md" inside agents/.
-AGENT_FILE_SUFFIX = ".agent.md"
+# Agent files live in agents/. Upstream ≤ v3.8.3 named them "<name>.agent.md";
+# v3.8.4 renamed them to plain "<name>.md" (the agents/ dir disambiguates now,
+# not the extension). Accept both so the converter keeps tracking upstream
+# across the rename. Longest suffix first so name-derivation prefers ".agent.md".
+AGENT_FILE_SUFFIXES = (".agent.md", ".md")
 
 # How we rename the plugin during trial. Switch to "ce" before filing upstream PR.
 LITE_NAME = "ce-lite"
@@ -113,7 +116,7 @@ def extract_agents(plugin_root: Path) -> list[AgentRecord]:
         raise FileNotFoundError(f"no agents/ directory at {agents_dir}")
 
     records: list[AgentRecord] = []
-    for path in sorted(agents_dir.glob(f"*{AGENT_FILE_SUFFIX}")):
+    for path in sorted(agents_dir.glob("*.md")):
         text = path.read_text(encoding="utf-8")
         try:
             fm, body = parse_frontmatter(text)
@@ -124,11 +127,14 @@ def extract_agents(plugin_root: Path) -> list[AgentRecord]:
         if not name:
             raise ValueError(f"{path}: agent has no 'name' in frontmatter")
 
-        # Sanity: filename should match name
-        expected_filename = f"{name}{AGENT_FILE_SUFFIX}"
-        if path.name != expected_filename:
+        # Sanity: filename should match name under one accepted suffix
+        # (.agent.md ≤v3.8.3, .md from v3.8.4). A stray non-agent *.md in
+        # agents/ (e.g. a README) fails loud here — intended.
+        accepted = {f"{name}{sfx}" for sfx in AGENT_FILE_SUFFIXES}
+        if path.name not in accepted:
             raise ValueError(
-                f"{path}: filename does not match name (expected {expected_filename!r})"
+                f"{path}: filename does not match frontmatter name {name!r} "
+                f"(expected one of {sorted(accepted)})"
             )
 
         records.append(

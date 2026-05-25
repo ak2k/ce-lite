@@ -3,7 +3,8 @@
 Lightweight-delegation variant of upstream [`EveryInc/compound-engineering-plugin`](https://github.com/EveryInc/compound-engineering-plugin):
 this repo's converter (`converter/*.py`) reads upstream's `agents/*.agent.md`
 files and emits a derived plugin in `dist/` with persistent agent
-registrations stripped (~58.8k tokens of idle context savings), specialist
+registrations stripped (~2k idle tokens per registered agent — ~88k on
+upstream v3.8.4, measured via `/context`), specialist
 prompts relocated to `references/agent-prompts/`, and orchestrator skills
 rewritten to dispatch via a `bin/ce-lite-persona` resolver shim.
 
@@ -38,9 +39,10 @@ byte-equivalent between upstream and dist (round-trip property).
   was extracted from (e.g. `compound-engineering-v3.8.3`). The
   `lite_suffix_from_git` versioning scheme keys off changes to this file.
 - `tests/test_converter.py` — pytest suite, fast (<2s).
-- `tests/integration/` — quota-spending integration eval (`claude -p`
-  routing tests); run via `nix run .#integration-eval`, NOT part of
-  `nix flake check`.
+- `tests/integration/` — opt-in, quota-spending routing probe driven by
+  `claude -p`; run via `nix run .#integration-eval`. Headless `-p` routing is
+  noisy/unreliable — treat output as a rough signal, not a passing/failing
+  test. NOT part of `nix flake check`.
 - `flake.nix` — `nix flake check` runs format + actionlint + pytest.
   `nix run .#integration-eval` for the quota-spending eval.
 

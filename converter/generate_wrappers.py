@@ -7,18 +7,19 @@ spontaneously suggest `/ce-ask-security-sentinel` when reviewing
 security-sensitive code, without re-paying the persistent-agent
 registration cost.
 
-Measured upstream baseline (compound-engineering-v3.8.3, May 2026):
-49 agent files totalling ~308KB ≈ ~77k tokens of body text (avg ~1.6k
-tokens/agent), plus frontmatter (~67 tokens × 49 ≈ ~3.3k tokens). If
-Claude Code loads the full body into idle context for every registered
-agent — which the lived experience of pre-ce-lite session bloat and the
-community-cited "~1.2k tokens per agent registration" figure both
-suggest — ce-lite's deferral saves ~71k tokens (factoring in ~5.3k
-tokens of SKILL.md descriptions ce-lite ships idle). If Claude loads
-only frontmatter into the registration slot, the savings collapse to
-roughly break-even. The prior "~58.8k baseline" in this docstring was a
-midpoint estimate; treat any specific number as approximate until
-empirically A/B'd against a vanilla install.
+Measured via interactive `/context` (Opus 4.7, isolated CLAUDE_CONFIG_DIRs,
+only the installed plugin differs): Claude Code loads each registered
+agent's full body into the "Custom agents" idle slot — ~2k tokens/agent.
+Upstream compound-engineering-v3.8.4 reads ~88k in that slot; ce-lite ships
+zero registrations, so it's empty. Net idle saving ≈ 94k (the ~88k agent
+slot + ~13.5k fewer agent descriptions in the Task-tool schema, less ~7.5k
+of SKILL.md descriptions ce-lite ships idle). The total scales with how many
+agents upstream registers (~2k each). (The earlier hedge here — "savings collapse to
+break-even if only frontmatter loads" — is resolved: full bodies do load
+idle. The prior "~58.8k"/"~71k" figures were char-count approximations,
+superseded by this measurement. NB `claude plugin details` projects only
+the ~50-tok/agent description as "always-on" and misses this slot — trust
+`/context`.)
 
 Dispatch lookup is handled by a single small Python shim at
 `dist/bin/ce-lite-persona` (this directory is on PATH because Claude Code
@@ -819,9 +820,10 @@ def write_persona_resolver(dist: Path) -> Path:
 
 # ---- UserPromptSubmit hook (Phase B.7) ----
 #
-# Phase B.5's meta-agent (ce-specialist) didn't fire autonomously — the
-# integration eval (Phase B.6) measured 0/2 on autonomous review prompts even
-# with the agent registered and visible to claude -p. Industry-wide
+# Phase B.5's meta-agent (ce-specialist) didn't fire autonomously. A headless
+# `claude -p` probe (Phase B.6) hinted at ~0/2 on autonomous review prompts with
+# the agent registered — but headless routing is unreliable, so weight it
+# lightly. Industry-wide
 # research (scottspence.com, paddo.dev, jefflester/claude-skills-supercharged,
 # spences10/claude-skills-cli) converges on the same finding: skills/agents
 # auto-activate ~20% of the time even with good descriptions, because Claude

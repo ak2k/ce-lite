@@ -5,11 +5,15 @@
 # ///
 """A/B measure idle-context cost: upstream CE vs ce-lite vs bare.
 
-The `generate_wrappers.py` docstring claims ~71k tokens of idle context savings
-from ce-lite's deferred-loading design, conditional on Claude Code loading agent
-bodies into the registration slot. This script answers the open question
-empirically by running `claude -p` against three isolated config dirs and
-reading `usage.input_tokens` from the JSON envelope.
+Interactive `/context` is the authoritative measurement of this saving (≈94k vs
+upstream; ~88k in the "Custom agents" slot on upstream v3.8.4 — Claude Code
+loads each agent's full body into that idle slot, ~2k/agent).
+
+This script sketches a headless A/B via `claude -p` (three isolated config dirs,
+reading `usage.input_tokens`), but the headless `-p` path does NOT reliably
+reproduce interactive idle-context loading — treat it as scaffolding, not a
+working test, and do not cite its output as confirmation. Use the interactive
+`/context` A/B.
 
 Invocation pattern follows ~/.claude/memory/claude_p_headless_subscription.md:
 NO `--system-prompt` (we want the default Claude Code system prompt loaded

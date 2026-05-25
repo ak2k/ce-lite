@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ce-lite",
-  "description": "Lightweight-delegation variant of compound-engineering. Drops the persistent agent registrations (~58.8k tokens baseline) and converts orchestrator skills to spawn Task subagents on demand from references/agent-prompts/. Auto-regenerated daily from upstream EveryInc/compound-engineering-plugin.",
+  "description": "Lightweight-delegation variant of compound-engineering. Drops the persistent agent registrations (~2k idle tokens per agent, ~88k on upstream v3.8.4) and converts orchestrator skills to spawn Task subagents on demand from references/agent-prompts/. Auto-regenerated daily from upstream EveryInc/compound-engineering-plugin.",
   "owner": {
     "name": "ak2k",
     "url": "https://github.com/ak2k"

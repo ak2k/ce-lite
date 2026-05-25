@@ -2,7 +2,7 @@
 
 Lightweight-delegation variant of [compound-engineering-plugin](https://github.com/EveryInc/compound-engineering-plugin).
 
-Drops the persistent agent registrations (**measured: ~99.9k tokens of idle context, gone**) and dispatches every specialist via a single resolver shim instead. Specialist prompts move to `references/agent-prompts/`; the resolver (`bin/ce-lite-persona`) loads them on demand. Same coverage as upstream CE, near-zero idle cost, and a `UserPromptSubmit` hook restores proactive specialist invocation across all 49 personas.
+Drops the persistent agent registrations (**~2k idle tokens per registered agent — ~88k of idle context on upstream v3.8.4, gone**) and dispatches every specialist via a single resolver shim instead. Specialist prompts move to `references/agent-prompts/`; the resolver (`bin/ce-lite-persona`) loads them on demand. Same coverage as upstream CE, near-zero idle cost, and a `UserPromptSubmit` hook restores proactive specialist invocation across all 49 personas.
 
 ## Install
 
@@ -15,17 +15,16 @@ During trial, slash commands are namespaced under `/ce-lite:*` so the original `
 
 ## Trade-offs vs. upstream CE
 
-Measured against an interactive Claude Code session (Opus 4.7 1M-context, two isolated `CLAUDE_CONFIG_DIR`s, identical state except the installed plugin):
+Measured via interactive `/context` (Opus 4.7 1M-context, isolated `CLAUDE_CONFIG_DIR`s, identical state except the installed plugin), upstream **compound-engineering-v3.8.4** vs ce-lite:
 
-| Context slot | Upstream CE | ce-lite | Δ |
+| Context slot | Upstream CE (v3.8.4) | ce-lite | Δ |
 |---|---:|---:|---:|
-| **Total** | **192.5k** | **87.3k** | **−105.2k** |
-| Custom agents | 99.9k (49 subagent registrations) | 0 (no registrations) | −99.9k |
-| System tools | 35.5k | 22.3k | −13.2k |
-| Skills | 4.6k | 12.5k | +7.9k |
-| System prompt / MCP / memory / messages | 52.5k | 52.5k | 0 |
+| Custom agents | ~88k (measured) | 0 (no registrations) | **≈ −88k** |
+| System tools | 28.2k | 14.7k | −13.5k |
+| Skills | 4.6k | 12.1k | +7.5k |
+| **Net idle** | | | **≈ −94k** |
 
-The ~99.9k of custom-agents context — Claude Code loads each registered subagent's full body for proactive selection — is the dominant savings. ce-lite trades a +7.9k skills bump (88 SKILL.md descriptions vs upstream's 29) for that.
+Claude Code loads each registered subagent's **full body** into idle context (~2k tokens per agent — the "Custom agents" slot above) so the model can proactively select it; ce-lite ships zero registrations, emptying that slot. The total scales with how many agents upstream registers (~2k each); an isolated `/context` on v3.8.4 measured ~88k. ce-lite trades a +7.5k skills bump (88 SKILL.md descriptions vs upstream's 38) for eliminating the agent slot — while keeping all 49 specialist personas addressable.
 
 | Behavior | Upstream CE | ce-lite |
 |---|---|---|
@@ -70,7 +69,7 @@ Run locally:
 ```sh
 nix develop                 # devshell with python + pyyaml + pytest + ruff + actionlint
 nix flake check             # treefmt (nixpkgs-fmt + ruff-format + ruff-check) + actionlint + pytest
-nix run .#integration-eval  # Tier 3 routing eval against `claude -p` (opt-in, quota-spending)
+nix run .#integration-eval  # opt-in routing probe via `claude -p` (quota-spending; headless routing is noisy — a rough signal, not a reliable test/gate)
 ```
 
 Re-refine the `UserPromptSubmit` keyword rules with `claude -p` (sonnet) before a release:
