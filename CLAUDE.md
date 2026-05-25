@@ -76,12 +76,15 @@ mechanism.
 
 ## Workflow pitfalls
 
-- `peter-evans/create-pull-request` with the default `GITHUB_TOKEN` is
-  intentionally blocked from triggering downstream workflows on the PR
-  it opens (GitHub anti-recursion safeguard). So `ci.yml` doesn't run
-  on auto-PRs from `publish-dist`. The publish-dist workflow already
-  runs the same checks (pytest + `validate.py --upstream` + nix flake
-  check) before opening the PR — those *are* the validation signal.
+- `publish-dist` opens its auto-PR with the `ak2k-ci` GitHub App token
+  (`actions/create-github-app-token@v3` → peter-evans `token:`), so the PR
+  fires `pull_request` → `ci.yml` runs → `auto-merge-publish-dist` merges
+  when green. This is deliberate: with the default `GITHUB_TOKEN`, GitHub
+  suppresses *all* events for the PR (including `pull_request_target`), so
+  `ci.yml` never ran and the auto-merge silently stalled every bump (fixed
+  in PR #32; secrets `CI_APP_ID`/`CI_APP_PRIVATE_KEY`, App installed with
+  `contents`+`pull_requests` write). The publish-dist run also validates
+  (pytest + `validate.py --upstream` + nix flake check) before opening.
 - `publish-dist` requires `fetch-depth: 0` on the main checkout so
   `lite_suffix_from_git` can compute N. Shallow clone (default
   `fetch-depth: 1`) silently falls back to bare `-lite`. Fixed in
@@ -89,6 +92,15 @@ mechanism.
 - Stacked PRs: merging the parent with `--delete-branch` auto-closes the
   child and disables `gh pr edit --base` retargeting on the closed PR.
   Retarget all dependents to `main` BEFORE merging the parent.
+- Measuring idle cost: use interactive `/context` (the **Custom agents**
+  slot) as the source of truth — **not** `claude plugin details`. Its
+  *Always-on* projection counts only agent descriptions (~50 tok/agent) and
+  misses the full agent bodies Claude Code loads into the Custom-agents slot
+  (~2k tok/agent), under-reporting a registered plugin's idle cost by ~15×
+  (upstream CE: `plugin details` ~5.7k vs `/context` ~88k). Per-agent body
+  cost (~2k) is the stable figure; the slot total scales with how many
+  agents register (43 → ~88k, 49 → ~100k). ce-lite registers zero, so the
+  slot is empty — that's the idle saving.
 
 ## Adding a new dispatch source
 
