@@ -148,9 +148,11 @@ def check_hooks_dir(dist: Path) -> None:
         if bad:
             fail(
                 f"dist/hooks/skill-rules.json references personas not in the "
-                f"manifest: {bad}. Either upstream renamed/removed them, or "
-                f"the rules file was hand-edited without updating "
-                f"DEFAULT_HOOK_RULES in generate_wrappers.py."
+                f"manifest: {bad}. Either upstream renamed/removed them (prune "
+                f"the stale entries from converter/overrides/persona-keywords.yaml) "
+                f"or skill-rules.json was rendered against a different manifest "
+                f"than this dist's (generate_wrappers.write_hooks must pass its "
+                f"`dist` through to render_hook_rules)."
             )
 
 

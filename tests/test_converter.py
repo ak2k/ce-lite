@@ -676,6 +676,53 @@ def test_render_hook_rules_covers_all_personas():
     )
 
 
+def test_write_hooks_derives_rules_from_passed_dist_not_in_tree(tmp_path: Path):
+    """skill-rules.json must be built from the manifest of the dist being
+    written, not the in-tree dist/.
+
+    Regression: the publish-dist workflow builds into a staging dir while the
+    committed dist/ still holds the *previous* release's manifest. When
+    write_hooks ignored its `dist` arg and let render_hook_rules fall back to
+    the in-tree default, a cross-release bump emitted skill-rules.json keyed
+    to the old persona set — orphan personas that validate.py then rejected.
+    """
+    from generate_wrappers import write_hooks
+
+    sentinel = "ce-staging-only-sentinel-reviewer"
+    staged = tmp_path / "dist"
+    (staged / "references" / "agent-prompts").mkdir(parents=True)
+    (staged / "references" / "agent-prompts" / "manifest.json").write_text(
+        _json.dumps(
+            {
+                "schema_version": 1,
+                "upstream_tag": "test",
+                "agent_count": 1,
+                "agents": [
+                    {
+                        "name": sentinel,
+                        "description": "Use when reviewing staging fixtures.",
+                        "model": "inherit",
+                        "tools": None,
+                        "prompt_path": f"references/agent-prompts/{sentinel}.md",
+                        "upstream_source": f"agents/{sentinel}.md",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    write_hooks(staged)
+
+    rules = _json.loads(
+        (staged / "hooks" / "skill-rules.json").read_text(encoding="utf-8")
+    )["rules"]
+    rule_personas = {r["persona"] for r in rules}
+    assert rule_personas == {sentinel}, (
+        f"skill-rules.json should reflect the staged manifest only; got {rule_personas}"
+    )
+
+
 # -------- hook script live runtime tests (Phase B.7) --------
 #
 # render_hook_script tests above prove we generate the right SOURCE.
