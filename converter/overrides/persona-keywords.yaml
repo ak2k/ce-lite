@@ -210,41 +210,24 @@ ce-data-integrity-guardian:
   phrasing: The prompt looks database or migration-flavored. Consider `/ce-lite:ce-data-integrity-guardian`
     for migration safety, constraint validation, transaction boundaries, and data-privacy
     compliance.
-ce-data-migration-expert:
-  _rationale: These terms are tightly scoped to database migration operations—backfills,
-    DDL changes, enum remapping, dual-write patterns—where silent data corruption
-    is the primary risk, making a specialist review distinctly valuable.
+ce-data-migration-reviewer:
+  _rationale: Migration diffs carry silent data-loss and deploy-window risk that general
+    review misses; the specialist checks schema drift, mapping correctness, backfill
+    completeness, dual-write hygiene, and rollback viability.
   keywords:
+  - schema drift
+  - deploy-window
   - backfill
-  - data migration
-  - column rename
-  - enum conversion
-  - dual-write
-  - id mapping
-  - ALTER TABLE
-  - idempotent
-  - schema change
-  phrasing: Migration-flavored prompt detected. Consider `/ce-lite:ce-data-migration-expert`
-    for validating backfills, ID mappings, enum conversions, and schema changes against
-    production data reality.
-ce-data-migrations-reviewer:
-  _rationale: These terms strongly signal database migration work where deployment-window
-    hazards — swapped enum mappings, missing backfills, unsafe column drops, and broken
-    dual-write transitions — require a specialist rather than a generic code reviewer.
-  keywords:
-  - backfill
-  - migration
+  - schema.rb
+  - db/migrate
   - dual-write
   - NOT NULL
   - enum mapping
-  - column drop
-  - schema change
-  - concurrent index
-  - data backfill
-  - rollback plan
-  phrasing: Schema-change / migration flavor. Consider `/ce-lite:ce-data-migrations-reviewer`
-    for a specialist review of rollback safety, dual-write windows, NOT NULL backfills,
-    and swapped enum mappings.
+  - structure.sql
+  - missing backfill
+  phrasing: Migration-flavored prompt detected. Consider `/ce-lite:ce-data-migration-reviewer`
+    for schema-drift detection, backfill safety, deploy-window breaks, enum/mapping
+    correctness, and rollback-plan review.
 ce-deployment-verification-agent:
   _rationale: Keywords anchor on the concrete artifacts this persona uniquely produces—backfill
     operations, rollback plans, Go/No-Go gates, data invariants, and SQL verification
@@ -315,25 +298,6 @@ ce-design-lens-reviewer:
   phrasing: Design-planning doc detected. Consider `/ce-lite:ce-design-lens-reviewer`
     for dimensional review of IA, interaction states, user flows, and AI-slop risk
     before implementation begins.
-ce-dhh-rails-reviewer:
-  _rationale: Keywords target Rails-specific architectural debates—service objects,
-    repository patterns, anemic models, JWT vs sessions, GraphQL ceremony, Hotwire
-    alternatives—that signal code drifting from Rails conventions and warrant the
-    DHH opinionated review persona.
-  keywords:
-  - service object
-  - repository pattern
-  - dependency injection
-  - anemic model
-  - GraphQL
-  - presenter
-  - service layer
-  - JWT
-  - Hotwire
-  - majestic monolith
-  phrasing: The prompt looks Rails-architecture-flavored. Consider `/ce-lite:ce-dhh-rails-reviewer`
-    for a DHH-perspective review that catches service objects, repository layers,
-    JWT-over-session, and other un-Rails abstractions.
 ce-feasibility-reviewer:
   _rationale: Keywords target planning-document vocabulary (brownfield, migration
     risk, dependency gap, rollback strategy) that is distinctive to feasibility review
@@ -440,57 +404,6 @@ ce-julik-frontend-races-reviewer:
   phrasing: Async/lifecycle-flavored prompt. Consider `/ce-lite:ce-julik-frontend-races-reviewer`
     for race conditions, stale timers, and lifecycle cleanup in Turbo/Stimulus/async
     UI code.
-ce-kieran-python-reviewer:
-  _rationale: Keywords target exact Python idioms, type-system constructs, and anti-patterns
-    Kieran hunts (missing annotations, exception swallowing, un-Pythonic structure),
-    minimizing false fires from generic prompts.
-  keywords:
-  - pythonic
-  - type hint
-  - type annotation
-  - TypedDict
-  - dataclass
-  - pydantic
-  - context manager
-  - bare except
-  - except pass
-  phrasing: 'Prompt looks Python-quality-flavored. Consider `/ce-lite:ce-kieran-python-reviewer`
-    for strict Pythonic review: type hints, structure, and exception-handling quality.'
-ce-kieran-rails-reviewer:
-  _rationale: Keywords target Rails-exclusive vocabulary (Turbo, Hotwire, before_action,
-    strong parameters, ActiveRecord callbacks) that signal the user is working on
-    a Rails diff matching Kieran's specialist review scope.
-  keywords:
-  - turbo stream
-  - Hotwire
-  - service object
-  - controller action
-  - ActiveRecord
-  - before_action
-  - strong parameters
-  - rails callback
-  - stimulus controller
-  phrasing: Rails-flavored diff detected. Consider `/ce-lite:ce-kieran-rails-reviewer`
-    for a strict Rails review covering controller clarity, Turbo/Hotwire patterns,
-    service object extraction, and regression hunting.
-ce-kieran-typescript-reviewer:
-  _rationale: Keywords target TypeScript-specific constructs (suppression directives,
-    cast patterns, union narrowing) that signal the user needs Kieran's high-bar type-safety
-    and structural-clarity review rather than a generic code reviewer.
-  keywords:
-  - TypeScript
-  - type safety
-  - as any
-  - '@ts-ignore'
-  - discriminated union
-  - type assertion
-  - nullable
-  - type narrowing
-  - ts-expect-error
-  - unknown as
-  phrasing: 'TypeScript-flavored prompt detected. Consider `/ce-lite:ce-kieran-typescript-reviewer`
-    for strict type-safety review: `any` usage, unsafe casts, nullable flows, and
-    discriminated-union exhaustiveness.'
 ce-learnings-researcher:
   _rationale: This persona specializes in searching docs/solutions/ via frontmatter
     metadata for past learnings, conventions, and prior decisions—preventing the team
@@ -675,25 +588,6 @@ ce-repo-research-analyst:
   phrasing: 'Prompt looks codebase-research-flavored. Consider `/ce-lite:ce-repo-research-analyst`
     for systematic repo research: structure, conventions, patterns, templates, and
     onboarding insights.'
-ce-schema-drift-detector:
-  _rationale: These keywords target Rails-specific ORM vocabulary and migration workflow
-    (schema.rb, db:migrate, migration DSL methods like add_column/create_table) that
-    uniquely identify schema drift scenarios rather than generic database or code
-    review tasks.
-  keywords:
-  - schema.rb
-  - schema drift
-  - db:migrate
-  - ActiveRecord
-  - add_column
-  - create_table
-  - schema version
-  - unrelated migration
-  - db/migrate
-  - migration timestamp
-  phrasing: Rails schema-drift signals detected. Consider `/ce-lite:ce-schema-drift-detector`
-    for detecting unrelated schema.rb changes by cross-referencing your PR's migrations
-    against schema.rb.
 ce-scope-guardian-reviewer:
   _rationale: Keywords target vocabulary exclusive to scope-and-complexity review
     (YAGNI, gold-plating, scope creep, premature abstraction) that strongly signals

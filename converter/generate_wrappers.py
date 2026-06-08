@@ -933,7 +933,7 @@ def write_hooks(dist: Path) -> list[Path]:
     script_path = hooks_dir / "auto_suggest.py"
 
     config_path.write_text(render_hook_config(), encoding="utf-8")
-    rules_path.write_text(render_hook_rules(), encoding="utf-8")
+    rules_path.write_text(render_hook_rules(dist), encoding="utf-8")
     if not _HOOK_SCRIPT_SOURCE_PATH.is_file():
         raise FileNotFoundError(
             f"missing hook script source at {_HOOK_SCRIPT_SOURCE_PATH} — "
