@@ -189,34 +189,19 @@
     },
     {
       "keywords": [
+        "schema drift",
+        "deploy-window",
         "backfill",
-        "data migration",
-        "column rename",
-        "enum conversion",
-        "dual-write",
-        "id mapping",
-        "ALTER TABLE",
-        "idempotent",
-        "schema change"
-      ],
-      "persona": "ce-data-migration-expert",
-      "phrasing": "Migration-flavored prompt detected. Consider `/ce-lite:ce-data-migration-expert` for validating backfills, ID mappings, enum conversions, and schema changes against production data reality."
-    },
-    {
-      "keywords": [
-        "backfill",
-        "migration",
+        "schema.rb",
+        "db/migrate",
         "dual-write",
         "NOT NULL",
         "enum mapping",
-        "column drop",
-        "schema change",
-        "concurrent index",
-        "data backfill",
-        "rollback plan"
+        "structure.sql",
+        "missing backfill"
       ],
-      "persona": "ce-data-migrations-reviewer",
-      "phrasing": "Schema-change / migration flavor. Consider `/ce-lite:ce-data-migrations-reviewer` for a specialist review of rollback safety, dual-write windows, NOT NULL backfills, and swapped enum mappings."
+      "persona": "ce-data-migration-reviewer",
+      "phrasing": "Migration-flavored prompt detected. Consider `/ce-lite:ce-data-migration-reviewer` for schema-drift detection, backfill safety, deploy-window breaks, enum/mapping correctness, and rollback-plan review."
     },
     {
       "keywords": [
@@ -278,22 +263,6 @@
       ],
       "persona": "ce-design-lens-reviewer",
       "phrasing": "Design-planning doc detected. Consider `/ce-lite:ce-design-lens-reviewer` for dimensional review of IA, interaction states, user flows, and AI-slop risk before implementation begins."
-    },
-    {
-      "keywords": [
-        "service object",
-        "repository pattern",
-        "dependency injection",
-        "anemic model",
-        "GraphQL",
-        "presenter",
-        "service layer",
-        "JWT",
-        "Hotwire",
-        "majestic monolith"
-      ],
-      "persona": "ce-dhh-rails-reviewer",
-      "phrasing": "The prompt looks Rails-architecture-flavored. Consider `/ce-lite:ce-dhh-rails-reviewer` for a DHH-perspective review that catches service objects, repository layers, JWT-over-session, and other un-Rails abstractions."
     },
     {
       "keywords": [
@@ -387,52 +356,6 @@
       ],
       "persona": "ce-julik-frontend-races-reviewer",
       "phrasing": "Async/lifecycle-flavored prompt. Consider `/ce-lite:ce-julik-frontend-races-reviewer` for race conditions, stale timers, and lifecycle cleanup in Turbo/Stimulus/async UI code."
-    },
-    {
-      "keywords": [
-        "pythonic",
-        "type hint",
-        "type annotation",
-        "TypedDict",
-        "dataclass",
-        "pydantic",
-        "context manager",
-        "bare except",
-        "except pass"
-      ],
-      "persona": "ce-kieran-python-reviewer",
-      "phrasing": "Prompt looks Python-quality-flavored. Consider `/ce-lite:ce-kieran-python-reviewer` for strict Pythonic review: type hints, structure, and exception-handling quality."
-    },
-    {
-      "keywords": [
-        "turbo stream",
-        "Hotwire",
-        "service object",
-        "controller action",
-        "ActiveRecord",
-        "before_action",
-        "strong parameters",
-        "rails callback",
-        "stimulus controller"
-      ],
-      "persona": "ce-kieran-rails-reviewer",
-      "phrasing": "Rails-flavored diff detected. Consider `/ce-lite:ce-kieran-rails-reviewer` for a strict Rails review covering controller clarity, Turbo/Hotwire patterns, service object extraction, and regression hunting."
-    },
-    {
-      "keywords": [
-        "TypeScript",
-        "type safety",
-        "as any",
-        "@ts-ignore",
-        "discriminated union",
-        "type assertion",
-        "nullable",
-        "type narrowing",
-        "ts-expect-error",
-        "unknown as"
-      ],
-      "persona": "ce-kieran-typescript-reviewer",
-      "phrasing": "TypeScript-flavored prompt detected. Consider `/ce-lite:ce-kieran-typescript-reviewer` for strict type-safety review: `any` usage, unsafe casts, nullable flows, and discriminated-union exhaustiveness."
     },
     {
       "keywords": [
@@ -599,22 +522,6 @@
       ],
       "persona": "ce-repo-research-analyst",
       "phrasing": "Prompt looks codebase-research-flavored. Consider `/ce-lite:ce-repo-research-analyst` for systematic repo research: structure, conventions, patterns, templates, and onboarding insights."
-    },
-    {
-      "keywords": [
-        "schema.rb",
-        "schema drift",
-        "db:migrate",
-        "ActiveRecord",
-        "add_column",
-        "create_table",
-        "schema version",
-        "unrelated migration",
-        "db/migrate",
-        "migration timestamp"
-      ],
-      "persona": "ce-schema-drift-detector",
-      "phrasing": "Rails schema-drift signals detected. Consider `/ce-lite:ce-schema-drift-detector` for detecting unrelated schema.rb changes by cross-referencing your PR's migrations against schema.rb."
     },
     {
       "keywords": [

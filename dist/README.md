@@ -25,8 +25,8 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 |-------|-------------|
 | [`/ce-strategy`](../../docs/skills/ce-strategy.md) | Create or maintain `STRATEGY.md` — the product's target problem, approach, persona, key metrics, and tracks. Re-runnable to update. Read as grounding by `/ce-ideate`, `/ce-brainstorm`, and `/ce-plan` when present |
 | [`/ce-ideate`](../../docs/skills/ce-ideate.md) | Optional big-picture ideation: generate and critically evaluate grounded ideas, then route the strongest one into brainstorming |
-| [`/ce-brainstorm`](../../docs/skills/ce-brainstorm.md) | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning |
-| [`/ce-plan`](../../docs/skills/ce-plan.md) | Create structured plans for any multi-step task -- software features, research workflows, events, study plans -- with automatic confidence checking |
+| [`/ce-brainstorm`](../../docs/skills/ce-brainstorm.md) | Interactive Q&A to think through a feature or problem and write a right-sized requirements doc before planning. Pass `output:html` to write the doc as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both) |
+| [`/ce-plan`](../../docs/skills/ce-plan.md) | Create structured plans for any multi-step task -- software features, research workflows, events, study plans -- with automatic confidence checking. Pass `output:html` to write the plan as a single self-contained HTML file instead of markdown (exclusive — md OR html, never both) |
 | [`/ce-code-review`](../../docs/skills/ce-code-review.md) | Structured code review with tiered persona agents, confidence gating, and dedup pipeline |
 | [`/ce-work`](../../docs/skills/ce-work.md) | Execute work items systematically |
 | [`/ce-debug`](../../docs/skills/ce-debug.md) | Systematically find root causes and fix bugs -- traces causal chains, forms testable hypotheses, and implements test-first fixes |
@@ -57,6 +57,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | Skill | Description |
 |-------|-------------|
 | [`/ce-demo-reel`](../../docs/skills/ce-demo-reel.md) | Capture a visual demo reel (GIF demos, terminal recordings, screenshots) for PRs with project-type-aware tier selection |
+| [`/ce-promote`](../../docs/skills/ce-promote.md) | Draft user-facing announcement copy for a shipped feature (X post, changelog blurb, LinkedIn, email); voice-matched via the Spiral CLI when installed, a lite layer of editorial & social expertise without it |
 | [`/ce-report-bug`](../../docs/skills/ce-report-bug.md) | Report a bug in the compound-engineering plugin |
 | [`/ce-resolve-pr-feedback`](../../docs/skills/ce-resolve-pr-feedback.md) | Resolve PR review feedback in parallel |
 | [`/ce-test-browser`](../../docs/skills/ce-test-browser.md) | Run browser tests on PR-affected pages |
@@ -72,6 +73,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 | `ce-agent-native-architecture` | Build AI agents using prompt-native architecture |
 | `ce-dhh-rails-style` | Write Ruby/Rails code in DHH's 37signals style |
 | [`ce-frontend-design`](../../docs/skills/ce-frontend-design.md) | Create production-grade frontend interfaces |
+| [`ce-polish`](../../docs/skills/ce-polish.md) | Conversational UX polish — start a dev server, open the feature in a browser, and iterate together; auto-detects 8 frameworks. Manual invocation only |
 
 ### Review & Quality
 
@@ -96,7 +98,7 @@ The primary entry points for engineering work, invoked as slash commands. Detail
 
 | Skill | Description |
 |-------|-------------|
-| [`ce-polish-beta`](../../docs/skills/ce-polish-beta.md) | Human-in-the-loop polish phase after /ce-code-review — verifies review + CI, starts a dev server from `.claude/launch.json`, generates a testable checklist, and dispatches polish sub-agents for fixes. Emits stacked-PR seeds for oversized work |
+| `ce-dogfood-beta` | Diff-scoped browser QA of the active branch: builds an exhaustive test matrix of every change, drives the app with agent-browser, then auto-fixes issues, adds regression tests, and commits each fix until green |
 | `/lfg` | Full autonomous engineering workflow |
 
 ## Agents
@@ -113,20 +115,14 @@ Agents are specialized subagents invoked by skills — you typically don't call 
 | `ce-code-simplicity-reviewer` | Final pass for simplicity and minimalism |
 | `ce-correctness-reviewer` | Logic errors, edge cases, state bugs |
 | `ce-data-integrity-guardian` | Database migrations and data integrity |
-| `ce-data-migration-expert` | Validate ID mappings match production, check for swapped values |
-| `ce-data-migrations-reviewer` | Migration safety with confidence calibration |
+| `ce-data-migration-reviewer` | Schema drift, migration safety, mapping verification, deploy-window checks |
 | `ce-deployment-verification-agent` | Create Go/No-Go deployment checklists for risky data changes |
-| `ce-dhh-rails-reviewer` | Rails review from DHH's perspective |
 | `ce-julik-frontend-races-reviewer` | Review JavaScript/Stimulus code for race conditions |
-| `ce-kieran-rails-reviewer` | Rails code review with strict conventions |
-| `ce-kieran-python-reviewer` | Python code review with strict conventions |
-| `ce-kieran-typescript-reviewer` | TypeScript code review with strict conventions |
 | `ce-maintainability-reviewer` | Coupling, complexity, naming, dead code |
 | `ce-pattern-recognition-specialist` | Analyze code for patterns and anti-patterns |
 | `ce-performance-oracle` | Performance analysis and optimization |
 | `ce-performance-reviewer` | Runtime performance with confidence calibration |
 | `ce-reliability-reviewer` | Production reliability and failure modes |
-| `ce-schema-drift-detector` | Detect unrelated schema.rb changes in PRs |
 | `ce-security-reviewer` | Exploitable vulnerabilities with confidence calibration |
 | `ce-security-sentinel` | Security audits and vulnerability assessments |
 | `ce-swift-ios-reviewer` | Swift and iOS code review -- SwiftUI state, retain cycles, concurrency, Core Data threading, accessibility |
