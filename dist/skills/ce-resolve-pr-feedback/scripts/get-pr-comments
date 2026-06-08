@@ -15,16 +15,21 @@ if [ -n "$2" ]; then
     OWNER=$(echo "$2" | cut -d/ -f1)
     REPO=$(echo "$2" | cut -d/ -f2)
 else
-    OWNER=$(gh repo view --json owner -q .owner.login 2>/dev/null)
-    REPO=$(gh repo view --json name -q .name 2>/dev/null)
+    # `|| true` is load-bearing: under `set -e`, a failed command substitution
+    # in an assignment aborts the script immediately. Run outside a git repo,
+    # `gh repo view` exits 1, its stderr is swallowed by `2>/dev/null`, and the
+    # script would die here with rc=1 and no output -- making the friendly error
+    # below unreachable. Keep `|| true` so detection failure falls through to it.
+    OWNER=$(gh repo view --json owner -q .owner.login 2>/dev/null || true)
+    REPO=$(gh repo view --json name -q .name 2>/dev/null || true)
 fi
 
 if [ -z "$OWNER" ] || [ -z "$REPO" ]; then
-    echo "Error: Could not detect repository. Pass OWNER/REPO as second argument."
+    echo "Error: could not resolve owner/repo. Run get-pr-comments from inside the target git repository, or pass OWNER/REPO as the second argument (e.g., get-pr-comments $PR_NUMBER EveryInc/cora)." >&2
     exit 1
 fi
 
-# Output is a JSON object with four keys:
+# Output is a JSON object with three keys:
 #   review_threads   - unresolved inline review threads, edge-wrapped as
 #                      [{ node: { id, isResolved, isOutdated, path, line, ...,
 #                                 comments: { nodes: [...] } } }]
@@ -32,9 +37,6 @@ fi
 #                      and known CI/status bots)
 #   review_bodies    - review submissions with non-empty body text (same
 #                      filtering as pr_comments)
-#   cross_invocation - cross-invocation awareness envelope:
-#     signal: true when both resolved and unresolved threads exist (multi-round review)
-#     resolved_threads: last 10 resolved threads by recency, for cluster analysis input
 #
 # Pagination (issue #798): each top-level connection -- reviewThreads,
 # comments, reviews -- is fetched in its own paginated query because
@@ -144,12 +146,6 @@ jq -n \
   [$reviews[].data.repository.pullRequest.reviews.nodes[]] as $all_reviews |
   ["codecov"] as $ci_bot_logins |
   [$all_threads[] | select(.isResolved == false)] as $unresolved |
-  ([$all_threads[]
-    | select(.isResolved == true)
-    | { thread_id: .id, path: .path, line: .line,
-        first_comment_body: .comments.nodes[0].body,
-        last_comment_at: ([.comments.nodes[].createdAt] | sort | last) }]
-    | sort_by(.last_comment_at) | .[-10:] | reverse) as $resolved |
   {
     review_threads: [$unresolved[] | { node: . }],
     pr_comments: [$all_comments[]
@@ -159,9 +155,5 @@ jq -n \
     review_bodies: [$all_reviews[]
       | select(.body != null and .body != "")
       | select(.author.login != $author.login)
-      | select(.author.login as $l | $ci_bot_logins | index($l) | not)],
-    cross_invocation: {
-      signal: (($resolved | length) > 0 and ($unresolved | length) > 0),
-      resolved_threads: $resolved
-    }
+      | select(.author.login as $l | $ci_bot_logins | index($l) | not)]
   }'

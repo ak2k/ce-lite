@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "upstream_tag": "compound-engineering-v3.8.4",
-  "agent_count": 49,
+  "upstream_tag": "compound-engineering-v3.11.2",
+  "agent_count": 43,
   "agents": [
     {
       "name": "ce-adversarial-document-reviewer",
@@ -147,21 +147,8 @@
       "upstream_source": "agents/ce-data-integrity-guardian.md"
     },
     {
-      "name": "ce-data-migration-expert",
-      "description": "Validates data migrations, backfills, and production data transformations against reality. Use when PRs involve ID mappings, column renames, enum conversions, or schema changes.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash"
-      ],
-      "prompt_path": "references/agent-prompts/ce-data-migration-expert.md",
-      "upstream_source": "agents/ce-data-migration-expert.md"
-    },
-    {
-      "name": "ce-data-migrations-reviewer",
-      "description": "Conditional code-review persona, selected when the diff touches migration files, schema changes, data transformations, or backfill scripts. Reviews code for data integrity and migration safety.",
+      "name": "ce-data-migration-reviewer",
+      "description": "Conditional code-review persona for migration files, schema dumps, backfills, and data transformations. Covers schema drift, mapping correctness, deploy-window safety, and verification plans.",
       "model": "inherit",
       "tools": [
         "Read",
@@ -170,8 +157,8 @@
         "Bash",
         "Write"
       ],
-      "prompt_path": "references/agent-prompts/ce-data-migrations-reviewer.md",
-      "upstream_source": "agents/ce-data-migrations-reviewer.md"
+      "prompt_path": "references/agent-prompts/ce-data-migration-reviewer.md",
+      "upstream_source": "agents/ce-data-migration-reviewer.md"
     },
     {
       "name": "ce-deployment-verification-agent",
@@ -214,20 +201,6 @@
       ],
       "prompt_path": "references/agent-prompts/ce-design-lens-reviewer.md",
       "upstream_source": "agents/ce-design-lens-reviewer.md"
-    },
-    {
-      "name": "ce-dhh-rails-reviewer",
-      "description": "Conditional code-review persona, selected when Rails diffs introduce architectural choices, abstractions, or frontend patterns that may fight the framework. Reviews code from an opinionated DHH perspective.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Write"
-      ],
-      "prompt_path": "references/agent-prompts/ce-dhh-rails-reviewer.md",
-      "upstream_source": "agents/ce-dhh-rails-reviewer.md"
     },
     {
       "name": "ce-feasibility-reviewer",
@@ -308,48 +281,6 @@
       "upstream_source": "agents/ce-julik-frontend-races-reviewer.md"
     },
     {
-      "name": "ce-kieran-python-reviewer",
-      "description": "Conditional code-review persona, selected when the diff touches Python code. Reviews changes with Kieran's strict bar for Pythonic clarity, type hints, and maintainability.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Write"
-      ],
-      "prompt_path": "references/agent-prompts/ce-kieran-python-reviewer.md",
-      "upstream_source": "agents/ce-kieran-python-reviewer.md"
-    },
-    {
-      "name": "ce-kieran-rails-reviewer",
-      "description": "Conditional code-review persona, selected when the diff touches Rails application code. Reviews Rails changes with Kieran's strict bar for clarity, conventions, and maintainability.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Write"
-      ],
-      "prompt_path": "references/agent-prompts/ce-kieran-rails-reviewer.md",
-      "upstream_source": "agents/ce-kieran-rails-reviewer.md"
-    },
-    {
-      "name": "ce-kieran-typescript-reviewer",
-      "description": "Conditional code-review persona, selected when the diff touches TypeScript code. Reviews changes with Kieran's strict bar for type safety, clarity, and maintainability.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
-        "Write"
-      ],
-      "prompt_path": "references/agent-prompts/ce-kieran-typescript-reviewer.md",
-      "upstream_source": "agents/ce-kieran-typescript-reviewer.md"
-    },
-    {
       "name": "ce-learnings-researcher",
       "description": "Searches docs/solutions/ for applicable past learnings via frontmatter metadata (bugs, architecture, design patterns, conventions, workflow learnings). Use before implementing features, making decisions, or starting work in a documented area so institutional knowledge carries forward.",
       "model": "inherit",
@@ -364,7 +295,7 @@
     },
     {
       "name": "ce-maintainability-reviewer",
-      "description": "Always-on code-review persona. Reviews code for premature abstraction, unnecessary indirection, dead code, coupling between unrelated modules, and naming that obscures intent.",
+      "description": "Always-on code-review persona. Reviews code for structural quality, complexity deletion, coupling, naming, dead code, type-boundary leaks, and abstraction debt.",
       "model": "inherit",
       "tools": [
         "Read",
@@ -493,19 +424,6 @@
       "upstream_source": "agents/ce-repo-research-analyst.md"
     },
     {
-      "name": "ce-schema-drift-detector",
-      "description": "Detects unrelated schema.rb changes in PRs by cross-referencing against included migrations. Use when reviewing PRs with database schema changes.",
-      "model": "inherit",
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash"
-      ],
-      "prompt_path": "references/agent-prompts/ce-schema-drift-detector.md",
-      "upstream_source": "agents/ce-schema-drift-detector.md"
-    },
-    {
       "name": "ce-scope-guardian-reviewer",
       "description": "Reviews planning documents for scope alignment and unjustified complexity -- challenges unnecessary abstractions, premature frameworks, and scope that exceeds stated goals. Spawned by the document-review skill.",
       "model": "sonnet",
@@ -617,7 +535,7 @@
     },
     {
       "name": "ce-web-researcher",
-      "description": "Performs iterative web research and returns structured external grounding. Use when ideating outside the codebase, validating prior art, scanning competitor patterns, finding cross-domain analogies, or fetching market signals. Prefer over manual web searches for structured external context.",
+      "description": "Performs iterative web research and returns structured external grounding. Use when planning or ideating outside the codebase, validating prior art, scanning competitor patterns, finding cross-domain analogies, or fetching market signals. Prefer over manual web searches for structured external context.",
       "model": "sonnet",
       "tools": null,
       "prompt_path": "references/agent-prompts/ce-web-researcher.md",
