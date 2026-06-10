@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "upstream_tag": "compound-engineering-v3.11.2",
+  "upstream_tag": "compound-engineering-v3.12.0",
   "agent_count": 43,
   "agents": [
     {
